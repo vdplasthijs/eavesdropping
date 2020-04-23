@@ -14,7 +14,7 @@ def create_sparse_mask(matrix, frac_sparse=0.1):
 class FRNN:
     def __init__(self, n_gen=20, p_gg=0.1, p_zg=1, p_gz=1,
                  tau=0.01, interval_w_update=10, alpha=1.0,
-                 g_gg=1.5, g_gz=1, fix_seed=None):
+                 g_gg=1.5, g_gz=1, fix_seed=None, ode_tau=0.01):
         if fix_seed is not None:
             np.random.seed(fix_seed)
         self.n_gen = int(n_gen)
@@ -28,7 +28,8 @@ class FRNN:
         self.p_sparsity['zg'] = p_zg
 
         self.tau = tau
-        assert interval_w_update > tau
+        self.ode_tau =ode_tau
+        assert type(interval_w_update) == int
         self.interval_w_update = interval_w_update
         self.alpha = alpha
 
@@ -111,13 +112,17 @@ class FRNN:
     def rnn_diff_eq(self, time=1):
         """time is an index"""
         assert type(time) == int
-        delta_x = 0
-        delta_x += -1 * self.x_forw[:, time]
-        delta_x += self.g_const['gg'] * np.dot(self.weights['gg'], self.r_forw[:, time])  # checked ,multiplies (R, C) x (C) = (R)
-        delta_x += self.g_const['gz'] * np.dot(self.weights['gz'], self.z_forw[time])  # checked
+        # delta_x = 0
+        # delta_x = -1 * self.x_forw[:, time]
+        # delta_x += self.g_const['gg'] * np.dot(self.weights['gg'], self.r_forw[:, time])  # checked ,multiplies (R, C) x (C) = (R)
+        # delta_x += self.g_const['gz'] * np.dot(self.weights['gz'], self.z_forw[time])  # checked
         # GF
         # GI
-        delta_x = delta_x / self.tau
+        # delta_x = delta_x / self.tau
+
+        delta_x = (-1 * self.x_forw[:, time] +
+                   np.sum(self.weights['gg'] * self.r_forw[:, time], 1) +
+                   self.weights['gz'] * self.z_forw[time]) / self.ode_tau
         return delta_x
 
     def euler_integration(self):
