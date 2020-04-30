@@ -1,108 +1,45 @@
-# https://discuss.pytorch.org/t/implementing-truncated-backpropagation-through-time/15500/4https://discuss.pytorch.org/t/implementing-truncated-backpropagation-through-time/15500/4
+import numpy as np
 import torch
 from torch import nn
 import torch.nn.functional as F
-# 
-# seq_len = 20
-# layer_size = 50
-# idx = 0
+from torch.utils.data import TensorDataset, DataLoader
 
-class TBPTT():
-    def __init__(self, one_step_module, loss_module, k1, k2, optimizer):
-        self.one_step_module = one_step_module
-        self.loss_module = loss_module
-        self.k1 = k1
-        self.k2 = k2
-        self.retain_graph = k1 < k2
-        # You can also remove all the optimizer code here, and the
-        # train function will just accumulate all the gradients in
-        # one_step_module parameters
-        self.optimizer = optimizer
-
-    def train(self, input_sequence, init_state):
-        states = [(None, init_state)]
-        for j, (inp, target) in enumerate(input_sequence):
-
-            state = states[-1][1].detach()
-            state.requires_grad=True
-            output, new_state = self.one_step_module(inp, state)
-            states.append((state, new_state))
-
-            while len(states) > self.k2:
-                # Delete stuff that is too old
-                del states[0]
-
-            if (j+1)%self.k1 == 0:
-                loss = self.loss_module(output, target)
-
-                self.optimizer.zero_grad()
-                # backprop last module (keep graph only if they ever overlap)
-                start = time.time()
-                loss.backward(retain_graph=self.retain_graph)
-                for i in range(self.k2-1):
-                    # if we get all the way back to the "init_state", stop
-                    if states[-i-2][0] is None:
-                        break
-                    curr_grad = states[-i-1][0].grad
-                    states[-i-2][1].backward(curr_grad, retain_graph=self.retain_graph)
-                print("bw: {}".format(time.time()-start))
-                self.optimizer.step()
-
-
-
-
-
-class MyMod(nn.Module):
-    def __init__(self):
-        super(MyMod, self).__init__()
-        self.lin = nn.Linear(2*layer_size, 2*layer_size)
-
-    def forward(self, inp, state):
-        global idx
-        full_out = self.lin(torch.cat([inp, state], 1))
-        # out, new_state = full_out.chunk(2, dim=1)
-        out = full_out.narrow(1, 0, layer_size)  # 0:layer_size 
-        new_state = full_out.narrow(1, layer_size, layer_size)  # layer_size:(2 * layersize)
-        def get_pr(idx_val):
-            def pr(*args):
-                print("doing backward {}".format(idx_val))
-            return pr
-        new_state.register_hook(get_pr(idx))
-        out.register_hook(get_pr(idx))
-        print("doing fw {}".format(idx))
-        idx += 1
-        return out, new_state
-
-
-# def bptt(self, x, y):
-#     T = len(y)
-    
-#     # Perform forward propagation
-#     o, s = self.forward_propagation(x)
-    
-#     # We accumulate the gradients in these variables
-#     dLdU = np.zeros(self.U.shape)
-#     dLdV = np.zeros(self.V.shape)
-#     dLdW = np.zeros(self.W.shape)
-#     delta_o = o
-#     delta_o[np.arange(len(y)), y] -= 1.0
-    
-#     # For each output backwards…
-#     for t in np.arange(T)[::-1]:
-#         dLdV += np.outer(delta_o[t], s[t].T)
+class RNN(nn.Module):
+    def __init__(self, n_stim, n_nodes):
+        super().__init__()
+        self.n_stim = n_stim
+        self.n_nodes = n_nodes
+        self.lin_input = nn.Linear(self.n_stim, self.n_nodes)
+        self.lin_feedback = nn.Linear(self.n_nodes, self.n_nodes)
+        self.lin_output = nn.Linear(self.n_nodes, self.n_stim)
+        self.init_state()
         
-#         # Initial delta calculation: dL/dz
-#         delta_t = self.V.T.dot(delta_o[t]) * (1 – (s[t] ** 2))
+    def init_state(self):
+        self.state = torch.randn(self.n_nodes) * 0.1  # initialise s_{-1}
         
-#         # Backpropagation through time (for at most self.bptt_truncate steps)
-#         for bptt_step in np.arange(max(0, t-self.bptt_truncate), t+1)[::-1]:
-#             # print "Backpropagation step t=%d bptt step=%d " % (t, bptt_step)
-            
-#             # Add to gradients at each previous step
-#             dLdW += np.outer(delta_t, s[bptt_step-1])
-#             dLdU[:,x[bptt_step]] += delta_t
-            
-#             # Update delta for next step dL/dz at t-1
-#             delta_t = self.W.T.dot(delta_t) * (1 – s[bptt_step-1] ** 2)
-        
-#     return [dLdU, dLdV, dLdW]
+    def forward(self, inp, rnn_state=None):
+        if rnn_state is None:
+            rnn_state = self.state
+        lin_comb = self.lin_input(inp) + self.lin_feedback(rnn_state)
+        new_state = torch.tanh(lin_comb)
+        self.state = new_state
+        output = F.softmax(self.lin_output(new_state.squeeze()), dim=0)
+        return new_state, output
+    
+def tau_loss(y_est, y_true, tau_array=np.array([2, 3]), 
+             model=None, reg_param=0.001):
+    y_est_trunc = y_est[:, tau_array, :]
+    y_true_trunc = y_true[:, tau_array, :]
+    ce = torch.sum(-1 * y_true_trunc * torch.log(y_est_trunc))
+    if model is not None:
+        params = [pp for pp in model.parameters()]
+        for _, p_set in enumerate(params):
+            ce += reg_param * p_set.norm(p=1)
+    return ce
+    
+def compute_full_pred(xdata, ydata, model):
+    full_pred = torch.zeros_like(ydata)
+    model.init_state()  # initiate rnn state
+    for tt in range(xdata.shape[1]):  # loop through time
+        _, full_pred[:, tt, :] = model(xdata[:, tt, :])
+    return full_pred
