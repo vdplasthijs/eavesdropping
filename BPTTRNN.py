@@ -30,16 +30,22 @@ def tau_loss(y_est, y_true, tau_array=np.array([2, 3]),
              model=None, reg_param=0.001):
     y_est_trunc = y_est[:, tau_array, :]
     y_true_trunc = y_true[:, tau_array, :]
-    ce = torch.sum(-1 * y_true_trunc * torch.log(y_est_trunc))
+    n_samples = y_true.shape[0]
+    if n_samples != 1:
+        print(f'n samples: {n_samples}')
+    ce = torch.sum(-1 * y_true_trunc * torch.log(y_est_trunc)) / n_samples  # take the mean CE over samples 
     if model is not None:
         params = [pp for pp in model.parameters()]
         for _, p_set in enumerate(params):
-            ce += reg_param * p_set.norm(p=1)
+            ce += reg_param * p_set.norm(p=1) 
     return ce
     
 def compute_full_pred(xdata, ydata, model):
     full_pred = torch.zeros_like(ydata)
-    model.init_state()  # initiate rnn state
-    for tt in range(xdata.shape[1]):  # loop through time
-        _, full_pred[:, tt, :] = model(xdata[:, tt, :])
+    if xdata.shape[0] != 1:
+        print(f'shape xdata: {xdata.shape}')
+    for kk in range(xdata.shape[0]): # loop over trials 
+        model.init_state()  # initiate rnn state per trial 
+        for tt in range(xdata.shape[1]):  # loop through time
+            _, full_pred[kk, tt, :] = model(xdata[kk, tt, :])  # compute prediction at this time 
     return full_pred
