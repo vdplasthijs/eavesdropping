@@ -96,8 +96,8 @@ class RNN(nn.Module):
         return new_state, output
     
 def tau_loss(y_est, y_true, tau_array=np.array([2, 3]), 
-             model=None, reg_param=0.001):
-     """Compute Cross Entropy of given time array tau_array, and add L1 regularisation."""
+             model=None, reg_param=0.001, use='less'):
+    '''Compute Cross Entropy of given time array tau_array, and add L1 regularisation.'''
     y_est_trunc = y_est[:, tau_array, :]  # only evaluated these time points 
     y_true_trunc = y_true[:, tau_array, :]
     n_samples = y_true.shape[0]
@@ -119,3 +119,4 @@ def compute_full_pred(xdata, model):
             _, full_pred[kk, tt, :] = model(xdata[kk, tt, :])  # compute prediction at this time 
     return full_pred
     
+
