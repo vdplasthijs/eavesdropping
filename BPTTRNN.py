@@ -6,13 +6,10 @@ from torch.utils.data import TensorDataset, DataLoader
 
 def generate_synt_data(n_total=100, n_times=9, n_freq=8,
                        ratio_train=0.8, ratio_exp=0.5, 
-                       noise_scale=0.05):
+                       noise_scale=0.05, double_length=False):
     assert ratio_train <= 1 and ratio_train >= 0
     n_total = int(n_total)
     n_half_total = int(np.round(n_total / 2))
-    n_train = int(ratio_train * n_total)
-    n_test = n_total - n_train
-    assert n_train + n_test == n_total
     assert ratio_exp <=1 and ratio_exp >= 0
     ratio_unexp = 1 - ratio_exp
     ratio_exp, ratio_unexp = ratio_exp / (ratio_exp + ratio_unexp ),  ratio_unexp / (ratio_exp + ratio_unexp)
@@ -41,13 +38,24 @@ def generate_synt_data(n_total=100, n_times=9, n_freq=8,
             all_seq[n_exp_half:n_half_total, 5, 6] = 1  #unexp C2
             labels[n_exp_half:n_half_total] = '12'
             all_seq[n_half_total:(n_half_total + n_exp_half), 5, 6] = 1 # exp C2 
-            labels[n_half_total:(n_half_total + n_exp_half)] = '21'
+            labels[n_half_total:(n_half_total + n_exp_half)] = '22'
             all_seq[(n_half_total + n_exp_half):, 5, 5] = 1  # unexp C1
-            labels[(n_half_total + n_exp_half):] = '22'
+            labels[(n_half_total + n_exp_half):] = '21'
             
     if n_times == 9:
         all_seq[:, 7, 7] = 1
         
+    if double_length:
+        new_all_seq = np.zeros((n_total, 2 * n_times, n_freq))
+        for kk in range(n_times):
+            new_all_seq[:, (2 * kk):(2 * (kk + 1)), :] = all_seq[:, kk, :][:, np.newaxis, :]
+        all_seq = new_all_seq
+        n_times = all_seq.shape[1]
+        
+    n_train = int(ratio_train * n_total)
+    n_test = n_total - n_train
+    assert n_train + n_test == n_total
+    
     ## Train/test data:
     shuffle_ind = np.random.choice(a=n_total, size=n_total, replace=False)
     all_seq = all_seq[shuffle_ind, :, :]  # shuffle randomly, (TODO: Stratified split)
