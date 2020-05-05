@@ -1,4 +1,6 @@
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -6,10 +8,12 @@ from torch.utils.data import TensorDataset, DataLoader
 import pickle, datetime
 from tqdm import tqdm, trange
 import time
+import scipy.cluster, scipy.spatial
 
 def generate_synt_data(n_total=100, n_times=9, n_freq=8,
                        ratio_train=0.8, ratio_exp=0.5,
                        noise_scale=0.05, double_length=False):
+    '''Generate synthetic data, see notebook for description.'''
     assert ratio_train <= 1 and ratio_train >= 0
     n_total = int(n_total)
     n_half_total = int(np.round(n_total / 2))
@@ -77,7 +81,9 @@ def generate_synt_data(n_total=100, n_times=9, n_freq=8,
 
 class RNN(nn.Module):
     def __init__(self, n_stim, n_nodes):
+        '''RNN Model with input/hidden/output layers. Fully connected. '''
         super().__init__()
+
         ## Model parameters
         self.n_stim = n_stim
         self.n_nodes = n_nodes
@@ -93,9 +99,12 @@ class RNN(nn.Module):
         self.test_loss_arr = []
 
     def init_state(self):
+        '''Initialise hidden state to random values N(0, 0.1)'''
         self.state = torch.randn(self.n_nodes) * 0.1  # initialise s_{-1}
 
     def forward(self, inp, rnn_state=None):
+        '''Perform one forward step given input and hidden state. If hidden state
+        (rnn_state) is None, self.state will be used (regular behaviour).'''
         if rnn_state is None:
             rnn_state = self.state
         lin_comb = self.lin_input(inp) + self.lin_feedback(rnn_state)  # input + previous state
@@ -105,10 +114,14 @@ class RNN(nn.Module):
         return new_state, output
 
     def set_info(self, param_dict):
+        '''Add information to the info dictionary. The param_dict is copied into
+        info_dict (including overwriting).'''
         for key, val in param_dict.items():
             self.info_dict[key] = val  # overwrites
 
     def save_model(self, filename=None):
+        '''Export this RNN model to filename. If filename is None, it is saved  under
+        a timestamp.'''
         dt = datetime.datetime.now()
         timestamp = str(dt.date()) + '-' + str(dt.hour).zfill(2) + str(dt.minute).zfill(2)
         self.info_dict['timestamp'] = timestamp
@@ -133,6 +146,8 @@ def tau_loss(y_est, y_true, tau_array=np.array([2, 3]),
     return ce
 
 def compute_full_pred(xdata, model):
+    '''Compute forward prediction of RNN. I.e. given an input series xdata, the
+    model (RNN) computes the predicted output series.'''
     if xdata.ndim == 2:
         xdata = xdata[None, :, :]
 
@@ -145,7 +160,10 @@ def compute_full_pred(xdata, model):
 
 def bptt_training(rnn, optimiser, dict_training_params,
                   x_train, x_test, y_train, y_test):
-
+    '''Training algorithm for backpropagation through time, given a RNN model, optimiser,
+    dictionary with training parameters and train and test data. RNN is NOT reset,
+    so continuation training is possible. Training can be aborted prematurely by Ctrl+C,
+    and it will terminate correctly.'''
     ## Create data loader objects:
     train_ds = TensorDataset(x_train, y_train)
     train_dl = DataLoader(train_ds, batch_size=dict_training_params['bs'])
@@ -209,6 +227,59 @@ def bptt_training(rnn, optimiser, dict_training_params,
         rnn.eval()
         print(f'Training ended prematurely by user at epoch {epoch}.\nResults saved in RNN Class.')
         return rnn
+
+
+def plot_weights(ax, rnn_layer, title='weights', xlabel='',
+                 ylabel='', xticklabels=None, yticklabels=None,
+                 weight_order=None):
+     '''Plot a weight matrix; given a RNN layer, with zero-symmetric clipping.'''
+    weights = [x for x in rnn_layer.parameters()][0].detach().numpy()
+    if weight_order is not None and weights.shape[0] == len(weight_order):
+        weights = weights[weight_order, :]
+    if weight_order is not None and weights.shape[1] == len(weight_order):
+        weights = weights[:, weight_order]
+    cutoff = np.percentile(np.abs(weights), 95)
+    sns.heatmap(weights, ax=ax, cmap='PiYG', vmax=cutoff, vmin=-1 * cutoff)
+    ax.set_title(title);
+    ax.set_xlabel(xlabel); ax.set_ylabel(ylabel)
+    if xticklabels is not None:
+        ax.set_xticklabels(xticklabels)
+    if yticklabels is not None:
+        ax.set_yticklabels(yticklabels)
+    return ax
+
+def plot_all_UWV(rnn_model, freq_labels='', weight_order=None):
+    '''Plot the 3 weight matrices  U, W and V.'''
+    fig, ax_w = plt.subplots(1, 3)
+    plot_weights(ax=ax_w[0], rnn_layer=rnn_model.lin_input,
+                title='U - Input stimulus-neuron weights',
+                xticklabels=freq_labels, ylabel='Neuron',
+                weight_order=weight_order, xlabel='Input')
+
+
+    plot_weights(ax=ax_w[1], rnn_layer=rnn_model.lin_feedback,
+                 title='W - Feedback neuron-neuron weights',
+                 ylabel='Neuron', xlabel='Neuron',
+                 weight_order=weight_order)
+
+    plot_weights(ax=ax_w[2], rnn_layer=rnn_model.lin_output,
+                 title='V - Ouput neuron-prediction weights',
+                 yticklabels=freq_labels, xlabel='Neuron',
+                 ylabel='Output', weight_order=weight_order)
+    return (fig, ax_w)
+
+def opt_leaf(w_mat, dim=0):
+    '''create optimal leaf order over dim, of matrix w_mat. if w_mat is not an
+    np.array then its assumed to be a RNN layer. see also: https://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.optimal_leaf_ordering.html#scipy.cluster.hierarchy.optimal_leaf_ordering'''
+    if type(w_mat) != np.ndarray:  # assume it's an rnn layer
+        w_mat = [x for x in w_mat.parameters()][0].detach().numpy()
+    assert w_mat.ndim == 2
+    if dim == 1:  # transpose to get right dim in shape
+        w_mat = w_mat.T
+    dist = scipy.spatial.distance.pdist(w_mat, metric='euclidean')  # distanc ematrix
+    link_mat = scipy.cluster.hierarchy.ward(dist)  # linkage matrix
+    opt_leaves =scipy.cluster.hierarchy.leaves_list(scipy.cluster.hierarchy.optimal_leaf_ordering(link_mat, dist))
+    return opt_leaves
 
 def angle_vecs(v1, v2):
     """Compute angle between two vectors with cosine similarity.
