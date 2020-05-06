@@ -17,6 +17,8 @@ def plot_weights(rnn_layer, ax=None, title='weights', xlabel='',
         weights = weights[:, weight_order]
     cutoff = np.percentile(np.abs(weights), 95)
     sns.heatmap(weights, ax=ax, cmap='PiYG', vmax=cutoff, vmin=-1 * cutoff)
+    bottom, top = ax.get_ylim()
+    ax.set_ylim(bottom + 0.5, top - 0.5)
     ax.set_title(title);
     ax.set_xlabel(xlabel); ax.set_ylabel(ylabel)
     if xticklabels is not None:
@@ -74,9 +76,10 @@ def plot_decoder_crosstemp_perf(score_matrix, ax=None, ticklabels=''):
     cmap_hm = sns.diverging_palette(145, 280, s=85, l=25, n=20)
     cmap_hm = 'BrBG'
     hm = sns.heatmap(score_matrix, cmap=cmap_hm, xticklabels=ticklabels,
-                           yticklabels=ticklabels, ax=ax, vmin=0, vmax=1)
+                           yticklabels=ticklabels, ax=ax, vmin=0, vmax=1,
+                           linewidths=0.1, linecolor='k')
     bottom, top = ax.get_ylim()
     ax.set_ylim(bottom + 0.5, top - 0.5)
     ax.set_ylabel('Training time tau'); ax.set_xlabel('Testing time t')
-    ax.set_title('Cross temporal SVM score');
+    ax.set_title('Cross temporal decoding score');
     return ax

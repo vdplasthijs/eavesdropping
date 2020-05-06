@@ -178,7 +178,7 @@ def bptt_training(rnn, optimiser, dict_training_params,
         rnn.info_dict['trained_epochs'] = 0
 
     ## Training procedure
-    if verbose >= 0:
+    if verbose > 0:
         init_str = f'Initialising training; start at epoch {rnn.info_dict["trained_epochs"]}'
     time.sleep(0.1)  # so printing doesn't interfere wtih tqdm bar
     try:
@@ -224,12 +224,12 @@ def bptt_training(rnn, optimiser, dict_training_params,
 
         ## Set to evaluate mode and cutoff for early termination
         rnn.eval()
-        if verbose >= 0:
-            print('Training finished. Results savedin RNN Class')
+        if verbose > 0:
+            print('Training finished. Results saved in RNN Class')
         return rnn
     except KeyboardInterrupt: # end prematurely by Ctrl+C
         rnn.eval()
-        if verbose >= 0:
+        if verbose > 0:
             print(f'Training ended prematurely by user at epoch {epoch}.\nResults saved in RNN Class.')
         return rnn
 
@@ -369,5 +369,3 @@ def aggregate_score_mats(model_folder='models/', check_info_dict=True):
         prev_name = mn
         f.close()
     return agg_score_mat
-
-# def aggregate_convergence
