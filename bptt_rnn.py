@@ -3,7 +3,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
-import pickle, datetime, time
+import pickle, datetime, time, os, sys
 from tqdm import tqdm, trange
 import sklearn.svm
 
@@ -117,15 +117,19 @@ class RNN(nn.Module):
         for key, val in param_dict.items():
             self.info_dict[key] = val  # overwrites
 
-    def save_model(self, filename=None):
+    def save_model(self, filename=None, folder=None):
         '''Export this RNN model to filename. If filename is None, it is saved  under
         a timestamp.'''
         dt = datetime.datetime.now()
         timestamp = str(dt.date()) + '-' + str(dt.hour).zfill(2) + str(dt.minute).zfill(2)
         self.info_dict['timestamp'] = timestamp
         if filename is None or type(filename) != str:
-            filename = f'models/rnn_{timestamp}'
-        filename = filename + '.data'
+            filename = f'rnn_{timestamp}'
+        if folder is None:
+            folder = 'models/'
+        elif folder[-1] != '/':
+            folder += '/'
+        filename = folder + filename + '.data'
         file_handle = open(filename, 'wb')
         pickle.dump(self, file_handle)
         print(f'RNN model saved as {filename}')
@@ -269,7 +273,7 @@ def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
         rnn_model.decoding_crosstemp_score = score_mat
     return score_mat, decoder_dict
 
-def init_train_save_rnn(t_dict, d_dict, n_simulations=1):
+def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/'):
     try:
         for nn in range(n_simulations):
             print(f'\n-----------\nsimulation {nn}/{n_simulations}')
@@ -300,7 +304,70 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1):
                                                dict_training_params=t_dict, save_inplace=True)
 
             ## Save results:
-            rnn.save_model()
+            rnn.save_model(folder=save_folder)
         return rnn  # return latest
     except KeyboardInterrupt:
         print('KeyboardInterrupt, exit')
+
+
+def aggregate_convergence(model_folder='models/', check_info_dict=True):
+    '''Aggregate all score matrices for all rnns saved in folder'''
+    if check_info_dict:
+        check_params = ['n_total', 'n_freq', 'n_times', 'ratio_train', 'ratio_exp',
+                        'noise_scale', 'n_nodes', 'doublesse']
+    if model_folder[-1] != '/':
+        model_folder += '/'
+    list_models = [x for x in os.listdir(model_folder) if x[-5:] == '.data']
+    list_loss = {'train': [], 'test': []}
+    arr_loss = {}
+    for ii, mn in enumerate(list_models):
+        with open(model_folder + mn, 'rb') as f:
+            model = pickle.load(f)
+        if ii > 0  and check_info_dict: # check if dicts with info are equal
+            for cp in check_params:
+                assert (model.info_dict[cp] == prev_model.info_dict[cp]), f'AssertionError: models {prev_name} and {mn} are different'
+            assert (model.info_dict['eval_times'] == prev_model.info_dict['eval_times']).all(), f'AssertionError: models {prev_name} and {mn} are different'
+
+        list_loss['train'].append(model.train_loss_arr)  # append training loss array
+        list_loss['test'].append(model.test_loss_arr)
+        prev_model = model
+        prev_name = mn
+        f.close()
+    for tt in ['train', 'test']:
+        len_loss = []
+        for tl in list_loss[tt]:  # for loss array in list:
+            len_loss.append(len(tl))  # append length
+        len_loss = np.array(len_loss)  # so we can determine the max
+        arr_loss[tt] = np.zeros((len(list_loss[tt]), len_loss.max())) + np.nan  # init matrix of (n_models x max_convergence_lenght) in nans
+        for i_tl, tl in enumerate(list_loss[tt]):
+            arr_loss[tt][i_tl, :len(tl)] = tl  # fill in convergence arrays. nans remain after termination
+    return arr_loss
+
+def aggregate_score_mats(model_folder='models/', check_info_dict=True):
+    '''Aggregate all score matrices for all rnns saved in folder'''
+    if check_info_dict:
+        check_params = ['n_total', 'n_freq', 'n_times', 'ratio_train', 'ratio_exp',
+                        'noise_scale', 'n_nodes', 'doublesse']
+    if model_folder[-1] != '/':
+        model_folder += '/'
+    list_models = [x for x in os.listdir(model_folder) if x[-5:] == '.data']
+    for ii, mn in enumerate(list_models):
+        with open(model_folder + mn, 'rb') as f:
+            model = pickle.load(f)
+        if ii == 0:  # use first to create agrr matrix
+            mat_shape = model.decoding_crosstemp_score.shape
+            assert len(mat_shape) == 2  # 2D matrix
+            agg_score_mat = np.zeros((len(list_models), mat_shape[0], mat_shape[1]))
+        else:  #TODO: fix check
+            if check_info_dict: # check if dicts with info are equal
+                for cp in check_params:
+                    assert (model.info_dict[cp] == prev_model.info_dict[cp]), f'AssertionError: models {prev_name} and {mn} are different'
+                assert (model.info_dict['eval_times'] == prev_model.info_dict['eval_times']).all(), f'AssertionError: models {prev_name} and {mn} are different'
+
+        agg_score_mat[ii, :, :] = model.decoding_crosstemp_score  # add score matrix
+        prev_model = model
+        prev_name = mn
+        f.close()
+    return agg_score_mat
+
+# def aggregate_convergence

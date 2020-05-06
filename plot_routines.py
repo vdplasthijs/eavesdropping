@@ -4,10 +4,12 @@ import seaborn as sns
 import bptt_rnn as bp
 import scipy.cluster, scipy.spatial
 
-def plot_weights(ax, rnn_layer, title='weights', xlabel='',
+def plot_weights(rnn_layer, ax=None, title='weights', xlabel='',
                  ylabel='', xticklabels=None, yticklabels=None,
                  weight_order=None):
     '''Plot a weight matrix; given a RNN layer, with zero-symmetric clipping.'''
+    if ax is None:
+        ax = plt.subplot(111)
     weights = [x for x in rnn_layer.parameters()][0].detach().numpy()
     if weight_order is not None and weights.shape[0] == len(weight_order):
         weights = weights[weight_order, :]
@@ -56,17 +58,23 @@ def opt_leaf(w_mat, dim=0):
     opt_leaves =scipy.cluster.hierarchy.leaves_list(scipy.cluster.hierarchy.optimal_leaf_ordering(link_mat, dist))
     return opt_leaves
 
-def plot_train_test_perf(rnn_model, ax):
+def plot_train_test_perf(rnn_model, ax=None):
     '''Plot train and test loss as function of epoch.'''
+    if ax is None:
+        ax = plt.subplot(111)
     ax.plot(rnn_model.train_loss_arr, label='train', linewidth=3)
     ax.plot(rnn_model.test_loss_arr, label='test', linewidth=3)
     ax.set_xlabel('Epoch'); ax.set_ylabel("Loss"); ax.legend();
     return ax
-    
-def plot_decoder_crosstemp_perf(score_matrix, ax, ticklabels=''):
+
+def plot_decoder_crosstemp_perf(score_matrix, ax=None, ticklabels=''):
     '''Plot matrix of cross temporal scores for decoding'''
-    hm = sns.heatmap(score_matrix, cmap='viridis', xticklabels=ticklabels, 
-                           yticklabels=ticklabels, ax=ax)
+    if ax is None:
+        ax = plt.subplot(111)
+    cmap_hm = sns.diverging_palette(145, 280, s=85, l=25, n=20)
+    cmap_hm = 'BrBG'
+    hm = sns.heatmap(score_matrix, cmap=cmap_hm, xticklabels=ticklabels,
+                           yticklabels=ticklabels, ax=ax, vmin=0, vmax=1)
     bottom, top = ax.get_ylim()
     ax.set_ylim(bottom + 0.5, top - 0.5)
     ax.set_ylabel('Training time tau'); ax.set_xlabel('Testing time t')
