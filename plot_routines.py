@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import BPTTRNN as bp
+import bptt_rnn as bp
 import scipy.cluster, scipy.spatial
 
 def plot_weights(ax, rnn_layer, title='weights', xlabel='',
@@ -61,4 +61,14 @@ def plot_train_test_perf(rnn_model, ax):
     ax.plot(rnn_model.train_loss_arr, label='train', linewidth=3)
     ax.plot(rnn_model.test_loss_arr, label='test', linewidth=3)
     ax.set_xlabel('Epoch'); ax.set_ylabel("Loss"); ax.legend();
+    return ax
+    
+def plot_decoder_crosstemp_perf(score_matrix, ax, ticklabels=''):
+    '''Plot matrix of cross temporal scores for decoding'''
+    hm = sns.heatmap(score_matrix, cmap='viridis', xticklabels=ticklabels, 
+                           yticklabels=ticklabels, ax=ax)
+    bottom, top = ax.get_ylim()
+    ax.set_ylim(bottom + 0.5, top - 0.5)
+    ax.set_ylabel('Training time tau'); ax.set_xlabel('Testing time t')
+    ax.set_title('Cross temporal SVM score');
     return ax
