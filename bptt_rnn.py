@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 import pickle, datetime, time, os, sys
 from tqdm import tqdm, trange
-import sklearn.svm
+import sklearn.svm, sklearn.model_selection
 
 def generate_synt_data(n_total=100, n_times=9, n_freq=8,
                        ratio_train=0.8, ratio_exp=0.5,
@@ -60,13 +60,13 @@ def generate_synt_data(n_total=100, n_times=9, n_freq=8,
     assert n_train + n_test == n_total
 
     ## Train/test data:
-    shuffle_ind = np.random.choice(a=n_total, size=n_total, replace=False)
-    all_seq = all_seq[shuffle_ind, :, :]  # shuffle randomly, (TODO: Stratified split)
-    labels = labels[shuffle_ind]
-    train_seq = all_seq[:n_train, :, :]
-    labels_train = labels[:n_train]
-    test_seq = all_seq[n_train:, :, :]
-    labels_test = labels[n_train:]
+    sss = sklearn.model_selection.StratifiedShuffleSplit(n_splits=1, train_size=ratio_train).split(X=np.zeros_like(labels),
+                                                                                 y=labels) # stratified split
+    train_inds, test_inds = next(sss)  # generate
+    train_seq = all_seq[train_inds, :, :]
+    labels_train = labels[train_inds]
+    test_seq = all_seq[test_inds, :, :]
+    labels_test = labels[test_inds]
     x_train = train_seq[:, :-1, :] + (np.random.randn(n_train, n_times - 1, n_freq) * noise_scale)  # add noise to input
     y_train = train_seq[:, 1:, :]  # do not add noise to output
     x_test = test_seq[:, :-1, :] + (np.random.randn(n_test, n_times - 1, n_freq) * noise_scale)
@@ -95,6 +95,7 @@ class RNN(nn.Module):
         self.train_loss_arr = []  # to be appended during training
         self.test_loss_arr = []
         self.decoding_crosstemp_score = None
+        self.decoder_dict = None
 
     def init_state(self):
         '''Initialise hidden state to random values N(0, 0.1)'''
@@ -240,11 +241,13 @@ def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
 
     rnn_model.eval()
     with torch.no_grad():
+        n_times = x_train.shape[1]
+
         ## Forward runs:
         for kk in range(x_train.shape[0]):  # trial loop
             rnn_model.init_state()
             hidden_state =  rnn_model.state  # init state
-            for tau in range(x_train.shape[1]):  # time loop
+            for tau in range(n_times):  # time loop
                 hidden_state, output =  rnn_model.forward(inp=x_train[kk, tau, :],
                                                    rnn_state=hidden_state)  # propagate
                 forw_mat['train'][kk, tau, :] = hidden_state.numpy()  # save hidden states
@@ -252,7 +255,7 @@ def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
         for kk in range(x_test.shape[0]):  # trial loop
             rnn_model.init_state()
             hidden_state =  rnn_model.state
-            for tau in range(x_test.shape[1]):  # time loop
+            for tau in range(n_times):  # time loop
                 hidden_state, output =  rnn_model.forward(inp=x_test[kk, tau, :],
                                                    rnn_state=hidden_state)
                 forw_mat['test'][kk, tau, :] = hidden_state.numpy()
@@ -260,17 +263,20 @@ def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
         ## Train decoder
         alpha_labels = {'train': np.array([int(x[0]) for x in labels_train]),
                         'test': np.array([int(x[0]) for x in labels_test])}
-        score_mat = np.zeros((x_train.shape[1], x_train.shape[1]))  # T x T
+        beta_labels = {'train': np.array([int(x[1]) for x in labels_train]),
+                       'test': np.array([int(x[1]) for x in labels_test])}
+        score_mat = np.zeros((n_times, n_times))  # T x T
         decoder_dict = {}  # save decoder per time
-        for tau in range(x_train.shape[1]):  # train time loop
-            decoder_dict[tau] = sklearn.svm.LinearSVC(C=1e-2)  # define SVM
+        for tau in range(n_times):  # train time loop
+            decoder_dict[tau] = sklearn.svm.LinearSVC(C=1e-6)  # define SVM
             decoder_dict[tau].fit(X=forw_mat['train'][:, tau, :],
                                   y=alpha_labels['train'])  # train SVM
-            for tt in range(x_train.shape[1]):  # test time loop
+            for tt in range(n_times):  # test time loop
                 score_mat[tau, tt] = decoder_dict[tau].score(X=forw_mat['test'][:, tt, :],
                                                              y=alpha_labels['test'])  # evaluate
     if save_inplace:
         rnn_model.decoding_crosstemp_score = score_mat
+        rnn_model.decoder_dict = decoder_dict
     return score_mat, decoder_dict
 
 def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/'):
