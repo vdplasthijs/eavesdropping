@@ -3,7 +3,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
-import pickle, datetime, time, os, sys
+import pickle, datetime, time, os, sys, git
 from tqdm import tqdm, trange
 import sklearn.svm, sklearn.model_selection
 
@@ -77,13 +77,14 @@ def generate_synt_data(n_total=100, n_times=9, n_freq=8,
     return (x_train, y_train, x_test, y_test), (labels_train, labels_test)
 
 class RNN(nn.Module):
-    def __init__(self, n_stim, n_nodes):
+    def __init__(self, n_stim, n_nodes, init_std_scale=0.1):
         '''RNN Model with input/hidden/output layers. Fully connected. '''
         super().__init__()
 
         ## Model parameters
         self.n_stim = n_stim
         self.n_nodes = n_nodes
+        self.init_std_scale = init_std_scale
         self.info_dict = {'converged': False}  # any info can be saved later
 
         ## Linear combination layers:
@@ -92,14 +93,23 @@ class RNN(nn.Module):
         self.lin_output = nn.Linear(self.n_nodes, self.n_stim)
         self.init_state()  # initialise RNN nodes
 
+        ## Attributes to be completed later:
         self.train_loss_arr = []  # to be appended during training
         self.test_loss_arr = []
+        self.test_loss_ratio_ce = []
         self.decoding_crosstemp_score = None
         self.decoder_dict = None
 
+        ## Automatic:
+        self.__datetime_created = datetime.datetime.now()
+        self.__version__ = '0.1'
+        self.__git_repo__ = git.Repo(search_parent_directories=True)
+        self.__git_branch__ = self.__git_repo__.head.reference.name
+        self.__git_commit__ = self.__git_repo__.head.object.hexsha
+
     def init_state(self):
         '''Initialise hidden state to random values N(0, 0.1)'''
-        self.state = torch.randn(self.n_nodes) * 0.1  # initialise s_{-1}
+        self.state = torch.randn(self.n_nodes) * self.init_std_scale  # initialise s_{-1}
 
     def forward(self, inp, rnn_state=None):
         '''Perform one forward step given input and hidden state. If hidden state
@@ -136,17 +146,22 @@ class RNN(nn.Module):
         print(f'RNN model saved as {filename}')
 
 def tau_loss(y_est, y_true, tau_array=np.array([2, 3]),
-             model=None, reg_param=0.001, use='less'):
+             model=None, reg_param=0.001, return_ratio_ce=False):
     '''Compute Cross Entropy of given time array tau_array, and add L1 regularisation.'''
     y_est_trunc = y_est[:, tau_array, :]  # only evaluated these time points
     y_true_trunc = y_true[:, tau_array, :]
     n_samples = y_true.shape[0]
     ce = torch.sum(-1 * y_true_trunc * torch.log(y_est_trunc)) / n_samples  # take the mean CE over samples
+    reg_loss = 0
     if model is not None:  # add L1 regularisation
-        params = [pp for pp in model.parameters()]
+        params = [pp for pp in model.parameters()]  # for all weight (matrices) in the model
         for _, p_set in enumerate(params):
-            ce += reg_param * p_set.norm(p=1)
-    return ce
+            reg_loss += reg_param * p_set.norm(p=1)
+    total_loss = ce + reg_loss
+    if return_ratio_ce is False:
+        return total_loss
+    elif return_ratio_ce:
+        return (total_loss, (ce / total_loss))
 
 def compute_full_pred(xdata, model):
     '''Compute forward prediction of RNN. I.e. given an input series xdata, the
@@ -181,7 +196,6 @@ def bptt_training(rnn, optimiser, dict_training_params,
     ## Training procedure
     if verbose > 0:
         init_str = f'Initialising training; start at epoch {rnn.info_dict["trained_epochs"]}'
-    time.sleep(0.1)  # so printing doesn't interfere wtih tqdm bar
     try:
         with trange(dict_training_params['n_epochs']) as tr:  # repeating epochs
             for epoch in tr:
@@ -194,7 +208,8 @@ def bptt_training(rnn, optimiser, dict_training_params,
                 for xb, yb in train_dl:  # returns torch(n_bs x n_times x n_freq)
                     full_pred = compute_full_pred(model=rnn, xdata=xb)  # predict time trace
                     loss = tau_loss(y_est=full_pred, y_true=yb, model=rnn,
-                                       reg_param=dict_training_params['l1_param'], tau_array=dict_training_params['eval_times'])  # compute loss
+                                       reg_param=dict_training_params['l1_param'],
+                                       tau_array=dict_training_params['eval_times'])  # compute loss
                     loss.backward()  # compute gradients
                     optimiser.step()  # update
                     optimiser.zero_grad()   # reset
@@ -204,13 +219,17 @@ def bptt_training(rnn, optimiser, dict_training_params,
                     ## Compute losses for saving:
                     full_pred = compute_full_pred(model=rnn, xdata=x_train)
                     train_loss = tau_loss(y_est=full_pred, y_true=y_train, model=rnn,
-                                       reg_param=dict_training_params['l1_param'], tau_array=dict_training_params['eval_times'])
+                                       reg_param=dict_training_params['l1_param'],
+                                       tau_array=dict_training_params['eval_times'])
                     rnn.train_loss_arr.append(float(train_loss.detach().numpy()))
 
                     full_test_pred = compute_full_pred(model=rnn, xdata=x_test)
-                    test_loss = tau_loss(y_est=full_test_pred, y_true=y_test, model=rnn,
-                                       reg_param=dict_training_params['l1_param'], tau_array=dict_training_params['eval_times'])
+                    test_loss, ratio = tau_loss(y_est=full_test_pred, y_true=y_test, model=rnn,
+                                               reg_param=dict_training_params['l1_param'],
+                                               tau_array=dict_training_params['eval_times'],
+                                               return_ratio_ce=True)
                     rnn.test_loss_arr.append(float(test_loss.detach().numpy()))
+                    rnn.test_loss_ratio_ce.append(float(ratio.detach().numpy()))
 
                     ## Inspect training loss for convergence
                     new_loss = rnn.train_loss_arr[epoch]
