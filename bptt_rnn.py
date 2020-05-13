@@ -106,6 +106,17 @@ class RNN(nn.Module):
         self.__git_repo__ = git.Repo(search_parent_directories=True)
         self.__git_branch__ = self.__git_repo__.head.reference.name
         self.__git_commit__ = self.__git_repo__.head.object.hexsha
+        self.file_name = None
+        self.full_path = None
+        self.rnn_name = 'RNN (not saved)'
+
+    def __str__(self):
+        """Define name"""
+        return self.rnn_name
+
+    def __repr__(self):
+        """Define representation"""
+        return f'Instance {self.rnn_name} of RNN Class'
 
     def init_state(self):
         '''Initialise hidden state to random values N(0, 0.1)'''
@@ -128,22 +139,24 @@ class RNN(nn.Module):
         for key, val in param_dict.items():
             self.info_dict[key] = val  # overwrites
 
-    def save_model(self, filename=None, folder=None):
-        '''Export this RNN model to filename. If filename is None, it is saved  under
+    def save_model(self, folder=None, verbose=True):
+        '''Export this RNN model to folder. If self.file_name is None, it is saved  under
         a timestamp.'''
         dt = datetime.datetime.now()
         timestamp = str(dt.date()) + '-' + str(dt.hour).zfill(2) + str(dt.minute).zfill(2)
         self.info_dict['timestamp'] = timestamp
-        if filename is None or type(filename) != str:
-            filename = f'rnn_{timestamp}'
+        if self.file_name is None:
+            self.rnn_name = f'rnn_{timestamp}'
+            self.file_name = f'rnn_{timestamp}.data'
         if folder is None:
             folder = 'models/'
         elif folder[-1] != '/':
             folder += '/'
-        filename = folder + filename + '.data'
-        file_handle = open(filename, 'wb')
+        self.full_path = folder + self.file_name
+        file_handle = open(self.full_path, 'wb')
         pickle.dump(self, file_handle)
-        print(f'RNN model saved as {filename}')
+        if verbose > 0:
+            print(f'RNN model saved as {self.file_name}')
 
 def tau_loss(y_est, y_true, tau_array=np.array([2, 3]),
              model=None, reg_param=0.001, return_ratio_ce=False):
@@ -254,7 +267,7 @@ def bptt_training(rnn, optimiser, dict_training_params,
         return rnn
 
 def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
-                  save_inplace=True, label_name='alpha'):
+                  save_inplace=True, label_name='alpha', sparsity_c=1e-1):
     n_nodes = rnn_model.info_dict['n_nodes']
     forw_mat = {'train': np.zeros((x_train.shape[0], x_train.shape[1], n_nodes)),
                 'test': np.zeros((x_test.shape[0], x_test.shape[1], n_nodes))}
@@ -266,17 +279,17 @@ def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
         ## Forward runs:
         for kk in range(x_train.shape[0]):  # trial loop
             rnn_model.init_state()
-            hidden_state =  rnn_model.state  # init state
+            hidden_state = rnn_model.state  # init state
             for tau in range(n_times):  # time loop
-                hidden_state, output =  rnn_model.forward(inp=x_train[kk, tau, :],
+                hidden_state, output = rnn_model.forward(inp=x_train[kk, tau, :],
                                                    rnn_state=hidden_state)  # propagate
                 forw_mat['train'][kk, tau, :] = hidden_state.numpy()  # save hidden states
 
         for kk in range(x_test.shape[0]):  # trial loop
             rnn_model.init_state()
-            hidden_state =  rnn_model.state
+            hidden_state = rnn_model.state
             for tau in range(n_times):  # time loop
-                hidden_state, output =  rnn_model.forward(inp=x_test[kk, tau, :],
+                hidden_state, output = rnn_model.forward(inp=x_test[kk, tau, :],
                                                    rnn_state=hidden_state)
                 forw_mat['test'][kk, tau, :] = hidden_state.numpy()
 
@@ -294,13 +307,49 @@ def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
             return None
         score_mat = np.zeros((n_times, n_times))  # T x T
         decoder_dict = {}  # save decoder per time
+        tmp_var = True
         for tau in range(n_times):  # train time loop
-            decoder_dict[tau] = sklearn.svm.LinearSVC(C=1e-6)  # define SVM
+            # decoder_dict[tau] = sklearn.svm.LinearSVC(C=sparsity_c)  # define SVM
+            decoder_dict[tau] = sklearn.linear_model.LogisticRegression(C=sparsity_c,
+                                                    solver='saga', penalty='l1', max_iter=250)  # define log reg
             decoder_dict[tau].fit(X=forw_mat['train'][:, tau, :],
                                   y=labels_use['train'])  # train SVM
             for tt in range(n_times):  # test time loop
-                score_mat[tau, tt] = decoder_dict[tau].score(X=forw_mat['test'][:, tt, :],
-                                                             y=labels_use['test'])  # evaluate
+                # score_mat[tau, tt] = decoder_dict[tau].score(X=forw_mat['test'][:, tt, :],
+                #                                              y=labels_use['test'])  # evaluate
+                prediction = decoder_dict[tau].predict_proba(X=forw_mat['test'][:, tt, :])
+                inds_labels = np.zeros_like(labels_use['test'])  # zero = class 0
+                inds_labels[(labels_use['test'] == decoder_dict[tau].classes_[1])] = 1
+                prob_correct = np.array([prediction[i_pred, ind] for i_pred, ind in enumerate(inds_labels)])
+                # if tau == 6 and tt == 6:
+                #     print(prediction.shape, inds_labels.shape, prob_correct.shape)
+                score_mat[tau, tt] = np.mean(prob_correct)
+                # score_mat[tau, tt] = np.exp(np.mean(np.log(prob_correct)))
+
+                ## Some stuff to test:
+                # if tmp_var and tau == 7 and score_mat[tau, tt] > 0.8:
+                #     print(tau, tt, score_mat[tau, tau], score_mat[tau, tt])
+                #     # pred = decoder_dict[tau].predict(X=forw_mat['train'][:, tt, :])  # evaluate)
+                #     # print(pred)
+                #     tmp_tau = forw_mat['test'][(labels_use['test'] == 1), :, :][:, tau, :]
+                #     tmp_t =  forw_mat['test'][(labels_use['test'] == 1), :, :][:, tt, :]
+                #     pred_proba = decoder_dict[tau].predict_proba(X=tmp_tau)[:, 0]  # evaluate)
+                #     print('train 1')
+                #     print(pred_proba)
+                #     print('test 1')
+                #     pred_proba = decoder_dict[tau].predict_proba(X=tmp_t)[:, 0]  # evaluate)
+                #     print(pred_proba)
+                #
+                #
+                #     tmp_tau = forw_mat['test'][(labels_use['test'] == 2), :, :][:, tau, :]
+                #     tmp_t =  forw_mat['test'][(labels_use['test'] == 2), :, :][:, tt, :]
+                #     pred_proba = decoder_dict[tau].predict_proba(X=tmp_tau)[:, 0]  # evaluate)
+                #     print('train 2')
+                #     print(pred_proba)
+                #     pred_proba = decoder_dict[tau].predict_proba(X=tmp_t)[:, 0]  # evaluate)
+                #     print('test 2')
+                #     print(pred_proba)
+                #     tmp_var = False
     if save_inplace:
         rnn_model.decoding_crosstemp_score = score_mat
         rnn_model.decoder_dict = decoder_dict
@@ -372,11 +421,13 @@ def train_multiple_decoders(rnn_folder='models/', ratio_expected=0.5,
     rnn_list = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
     for i_rnn, rnn_name in tqdm(enumerate(rnn_list)):
         ## Load RNN:
+        print(rnn_name)
         with open(rnn_folder + rnn_name, 'rb') as f:
             rnn = pickle.load(f)
         _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=ratio_expected,
                                           n_samples=n_samples, ratio_train=ratio_train,
                                           verbose=(i_rnn == 0)) # results are saved in RNN class
+        rnn.save_model(folder=rnn_folder, verbose=0)  # save results to file
     return None
 
 def aggregate_convergence(model_folder='models/', check_info_dict=True):
