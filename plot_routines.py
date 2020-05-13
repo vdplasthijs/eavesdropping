@@ -83,3 +83,28 @@ def plot_decoder_crosstemp_perf(score_matrix, ax=None, ticklabels=''):
     ax.set_ylabel('Training time tau'); ax.set_xlabel('Testing time t')
     ax.set_title('Cross temporal decoding score');
     return ax
+
+def plot_dynamic_decoding_axes(rnn, ax=None, ticklabels=''):
+    if ax is None:
+        ax = plt.subplot(111)
+
+    decoder_axes = np.zeros((rnn.decoder_dict[0].coef_.size, len(rnn.decoder_dict)))
+    for k, v in rnn.decoder_dict.items():
+        decoder_axes[:, k] = v.coef_
+    cutoff_w = np.percentile(np.abs(decoder_axes), 95)
+
+    ax_dec_diag = plt.subplot(3, 1, 1)
+    ax_dec_diag.plot(np.diag(rnn.decoding_crosstemp_score), linewidth=3)
+    ax_dec_diag.set_ylabel('Score')
+    ax_dec_diag.set_title('Decoding performance (t = tau)')
+    ax_dec_diag.set_xticks(np.arange(len(np.diag(rnn.decoding_crosstemp_score))));
+    ax_dec_diag.set_xticklabels(ticklabels);
+    ax_dec_diag.set_xlim([-0.5, len(np.diag(rnn.decoding_crosstemp_score)) - 0.5])
+
+    plt.subplot(3, 1, (2, 3))
+    ax_dec_w = sns.heatmap(decoder_axes, xticklabels=ticklabels,
+                          vmin=-1 * cutoff_w, vmax=cutoff_w, cmap='PiYG', cbar=False)
+    bottom, top = ax_dec_w.get_ylim()
+    ax_dec_w.set_ylim(bottom + 0.5, top - 0.5)
+    ax_dec_w.set_xlabel('Time t'); ax_dec_w.set_ylabel('Neuron');
+    return ax_dec_diag, ax_dec_w

@@ -342,32 +342,41 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/'):
     except KeyboardInterrupt:
         print('KeyboardInterrupt, exit')
 
+def train_single_decoder_new_data(rnn, ratio_expected=0.5,
+                                  n_samples=None, ratio_train=0.8, verbose=False):
+    '''Generates new data, and then trains the decoder via train_decoder()'''
+    if n_samples is None:
+        n_samples = rnn.info_dict['n_total']
+
+    ## Generate data:
+    tmp0, tmp1 = generate_synt_data(n_total=n_samples,
+                                   n_times=rnn.info_dict['n_times'],
+                                   n_freq=rnn.info_dict['n_freq'],
+                                   ratio_train=ratio_train,
+                                   ratio_exp=ratio_expected,
+                                   noise_scale=rnn.info_dict['noise_scale'],
+                                   double_length=rnn.info_dict['doublesse'])
+    x_train, y_train, x_test, y_test = tmp0
+    labels_train, labels_test = tmp1
+    if verbose > 0:
+        print('train labels ', {x: np.sum(labels_train == x) for x in np.unique(labels_train)})
+    ## Train decoder:
+    score_mat, decoder_dict = train_decoder(rnn_model=rnn, x_train=x_train, x_test=x_test,
+                                           labels_train=labels_train, labels_test=labels_test,
+                                           save_inplace=True)
+    return score_mat, decoder_dict
+
 def train_multiple_decoders(rnn_folder='models/', ratio_expected=0.5,
                             n_samples=None, ratio_train=0.8):
+    '''train decoders for all RNNs in rnn_folder'''
     rnn_list = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
     for i_rnn, rnn_name in tqdm(enumerate(rnn_list)):
         ## Load RNN:
         with open(rnn_folder + rnn_name, 'rb') as f:
             rnn = pickle.load(f)
-        if n_samples is None:
-            n_samples = rnn.info_dict['n_total']
-
-        ## Generate data:
-        tmp0, tmp1 = bp.generate_synt_data(n_total=n_samples,
-                                           n_times=rnn.info_dict['n_times'],
-                                           n_freq=rnn.info_dict['n_freq'],
-                                           ratio_train=ratio_train,
-                                           ratio_exp=ratio_expected,
-                                           noise_scale=rnn.info_dict['noise_scale'],
-                                           double_length=rnn.info_dict['doublesse'])
-        x_train, y_train, x_test, y_test = tmp0
-        labels_train, labels_test = tmp1
-
-        ## Train decoder:
-        score_mat, decoder_dict = bp.train_decoder(rnn_model=rnn, x_train=x_train, x_test=x_test,
-                                                   labels_train=labels_train, labels_test=labels_test,
-                                                   save_inplace=True)
-
+        _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=ratio_expected,
+                                          n_samples=n_samples, ratio_train=ratio_train,
+                                          verbose=(i_rnn == 0)) # results are saved in RNN class
     return None
 
 def aggregate_convergence(model_folder='models/', check_info_dict=True):
