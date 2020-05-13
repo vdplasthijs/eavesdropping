@@ -194,8 +194,8 @@ def bptt_training(rnn, optimiser, dict_training_params,
         rnn.info_dict['trained_epochs'] = 0
 
     ## Training procedure
-    if verbose > 0:
-        init_str = f'Initialising training; start at epoch {rnn.info_dict["trained_epochs"]}'
+    #if verbose > 0:
+    init_str = f'Initialising training; start at epoch {rnn.info_dict["trained_epochs"]}'
     try:
         with trange(dict_training_params['n_epochs']) as tr:  # repeating epochs
             for epoch in tr:
@@ -254,9 +254,10 @@ def bptt_training(rnn, optimiser, dict_training_params,
         return rnn
 
 def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
-                  dict_training_params, save_inplace=True):
-    forw_mat = {'train': np.zeros((x_train.shape[0], x_train.shape[1], dict_training_params['n_nodes'])),
-                'test': np.zeros((x_test.shape[0], x_test.shape[1], dict_training_params['n_nodes']))}
+                  save_inplace=True, label_name='alpha'):
+    n_nodes = rnn_model.info_dict['n_nodes']
+    forw_mat = {'train': np.zeros((x_train.shape[0], x_train.shape[1], n_nodes)),
+                'test': np.zeros((x_test.shape[0], x_test.shape[1], n_nodes))}
 
     rnn_model.eval()
     with torch.no_grad():
@@ -284,15 +285,22 @@ def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
                         'test': np.array([int(x[0]) for x in labels_test])}
         beta_labels = {'train': np.array([int(x[1]) for x in labels_train]),
                        'test': np.array([int(x[1]) for x in labels_test])}
+        if label_name == 'alpha':
+            labels_use = alpha_labels
+        elif label_name == 'beta':
+            labels_use = beta_labels
+        else:
+            print(f'Label name {label_name} not implemented. Please choose alpha or beta. Aborting')
+            return None
         score_mat = np.zeros((n_times, n_times))  # T x T
         decoder_dict = {}  # save decoder per time
         for tau in range(n_times):  # train time loop
             decoder_dict[tau] = sklearn.svm.LinearSVC(C=1e-6)  # define SVM
             decoder_dict[tau].fit(X=forw_mat['train'][:, tau, :],
-                                  y=alpha_labels['train'])  # train SVM
+                                  y=labels_use['train'])  # train SVM
             for tt in range(n_times):  # test time loop
                 score_mat[tau, tt] = decoder_dict[tau].score(X=forw_mat['test'][:, tt, :],
-                                                             y=alpha_labels['test'])  # evaluate
+                                                             y=labels_use['test'])  # evaluate
     if save_inplace:
         rnn_model.decoding_crosstemp_score = score_mat
         rnn_model.decoder_dict = decoder_dict
@@ -325,8 +333,8 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/'):
 
             ## Decode cross temporally
             score_mat, decoder_dict = train_decoder(rnn_model=rnn, x_train=x_train, x_test=x_test,
-                                               labels_train=labels_train, labels_test=labels_test,
-                                               dict_training_params=t_dict, save_inplace=True)
+                                                    labels_train=labels_train, labels_test=labels_test,
+                                                    save_inplace=True)
 
             ## Save results:
             rnn.save_model(folder=save_folder)
@@ -334,6 +342,33 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/'):
     except KeyboardInterrupt:
         print('KeyboardInterrupt, exit')
 
+def train_multiple_decoders(rnn_folder='models/', ratio_expected=0.5,
+                            n_samples=None, ratio_train=0.8):
+    rnn_list = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
+    for i_rnn, rnn_name in tqdm(enumerate(rnn_list)):
+        ## Load RNN:
+        with open(rnn_folder + rnn_name, 'rb') as f:
+            rnn = pickle.load(f)
+        if n_samples is None:
+            n_samples = rnn.info_dict['n_total']
+
+        ## Generate data:
+        tmp0, tmp1 = bp.generate_synt_data(n_total=n_samples,
+                                           n_times=rnn.info_dict['n_times'],
+                                           n_freq=rnn.info_dict['n_freq'],
+                                           ratio_train=ratio_train,
+                                           ratio_exp=ratio_expected,
+                                           noise_scale=rnn.info_dict['noise_scale'],
+                                           double_length=rnn.info_dict['doublesse'])
+        x_train, y_train, x_test, y_test = tmp0
+        labels_train, labels_test = tmp1
+
+        ## Train decoder:
+        score_mat, decoder_dict = bp.train_decoder(rnn_model=rnn, x_train=x_train, x_test=x_test,
+                                                   labels_train=labels_train, labels_test=labels_test,
+                                                   save_inplace=True)
+
+    return None
 
 def aggregate_convergence(model_folder='models/', check_info_dict=True):
     '''Aggregate all score matrices for all rnns saved in folder'''
