@@ -321,35 +321,8 @@ def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
                 inds_labels = np.zeros_like(labels_use['test'])  # zero = class 0
                 inds_labels[(labels_use['test'] == decoder_dict[tau].classes_[1])] = 1
                 prob_correct = np.array([prediction[i_pred, ind] for i_pred, ind in enumerate(inds_labels)])
-                # if tau == 6 and tt == 6:
-                #     print(prediction.shape, inds_labels.shape, prob_correct.shape)
                 score_mat[tau, tt] = np.mean(prob_correct)
                 # score_mat[tau, tt] = np.exp(np.mean(np.log(prob_correct)))
-
-                ## Some stuff to test:
-                # if tmp_var and tau == 7 and score_mat[tau, tt] > 0.8:
-                #     print(tau, tt, score_mat[tau, tau], score_mat[tau, tt])
-                #     # pred = decoder_dict[tau].predict(X=forw_mat['train'][:, tt, :])  # evaluate)
-                #     # print(pred)
-                #     tmp_tau = forw_mat['test'][(labels_use['test'] == 1), :, :][:, tau, :]
-                #     tmp_t =  forw_mat['test'][(labels_use['test'] == 1), :, :][:, tt, :]
-                #     pred_proba = decoder_dict[tau].predict_proba(X=tmp_tau)[:, 0]  # evaluate)
-                #     print('train 1')
-                #     print(pred_proba)
-                #     print('test 1')
-                #     pred_proba = decoder_dict[tau].predict_proba(X=tmp_t)[:, 0]  # evaluate)
-                #     print(pred_proba)
-                #
-                #
-                #     tmp_tau = forw_mat['test'][(labels_use['test'] == 2), :, :][:, tau, :]
-                #     tmp_t =  forw_mat['test'][(labels_use['test'] == 2), :, :][:, tt, :]
-                #     pred_proba = decoder_dict[tau].predict_proba(X=tmp_tau)[:, 0]  # evaluate)
-                #     print('train 2')
-                #     print(pred_proba)
-                #     pred_proba = decoder_dict[tau].predict_proba(X=tmp_t)[:, 0]  # evaluate)
-                #     print('test 2')
-                #     print(pred_proba)
-                #     tmp_var = False
     if save_inplace:
         rnn_model.decoding_crosstemp_score = score_mat
         rnn_model.decoder_dict = decoder_dict
@@ -421,7 +394,6 @@ def train_multiple_decoders(rnn_folder='models/', ratio_expected=0.5,
     rnn_list = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
     for i_rnn, rnn_name in tqdm(enumerate(rnn_list)):
         ## Load RNN:
-        print(rnn_name)
         with open(rnn_folder + rnn_name, 'rb') as f:
             rnn = pickle.load(f)
         _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=ratio_expected,
