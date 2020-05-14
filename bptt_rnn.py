@@ -354,9 +354,11 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/'):
                         verbose=0)
 
             ## Decode cross temporally
-            score_mat, decoder_dict = train_decoder(rnn_model=rnn, x_train=x_train, x_test=x_test,
-                                                    labels_train=labels_train, labels_test=labels_test,
-                                                    save_inplace=True)
+            # score_mat, decoder_dict = train_decoder(rnn_model=rnn, x_train=x_train, x_test=x_test,
+            #                                         labels_train=labels_train, labels_test=labels_test,
+            #                                         save_inplace=True)
+            score_mat, decoder_dict = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
+                                                            n_samples=None, ratio_train=0.8, verbose=False)
 
             ## Save results:
             rnn.save_model(folder=save_folder)
@@ -461,3 +463,61 @@ def aggregate_score_mats(model_folder='models/', check_info_dict=True):
         prev_name = mn
         f.close()
     return agg_score_mat
+
+
+def aggregate_decoders(model_folder='models/', check_info_dict=True):
+    '''Aggregate all score matrices for all rnns saved in folder'''
+    if check_info_dict:
+        check_params = ['n_total', 'n_freq', 'n_times', 'ratio_train', 'ratio_exp',
+                        'noise_scale', 'n_nodes', 'doublesse']
+    if model_folder[-1] != '/':
+        model_folder += '/'
+    list_models = [x for x in os.listdir(model_folder) if x[-5:] == '.data']
+    for ii, mn in enumerate(list_models):
+        with open(model_folder + mn, 'rb') as f:
+            model = pickle.load(f)
+        if ii == 0:  # use first to create agrr matrix
+            n_decoders = len(model.decoder_dict)
+            n_nodes = len(model.decoder_dict[0].coef_[0])
+            assert n_nodes == model.info_dict['n_nodes'], f'n nodes error: coef: {n_nodes}, info dict: {model.info_dict["n_nodes"]}'
+            decoder_mat = np.zeros((len(list_models), n_nodes, n_decoders))
+        else:  #TODO: fix check
+            if check_info_dict: # check if dicts with info are equal
+                for cp in check_params:
+                    assert (model.info_dict[cp] == prev_model.info_dict[cp]), f'AssertionError: models {prev_name} and {mn} are different'
+                assert (model.info_dict['eval_times'] == prev_model.info_dict['eval_times']).all(), f'AssertionError: models {prev_name} and {mn} are different'
+        for i_dec, dec in model.decoder_dict.items():
+            decoder_mat[ii, :, i_dec] = dec.coef_[0] # add score matrix
+        prev_model = model
+        prev_name = mn
+        f.close()
+    return decoder_mat
+
+def aggregate_weights(model_folder='models/', weight='U', check_info_dict=True):
+        '''Aggregate all score matrices for all rnns saved in folder'''
+        if check_info_dict:
+            check_params = ['n_total', 'n_freq', 'n_times', 'ratio_train', 'ratio_exp',
+                            'noise_scale', 'n_nodes', 'doublesse']
+        if model_folder[-1] != '/':
+            model_folder += '/'
+        list_models = [x for x in os.listdir(model_folder) if x[-5:] == '.data']
+        for ii, mn in enumerate(list_models):
+            with open(model_folder + mn, 'rb') as f:
+                model = pickle.load(f)
+            if ii == 0:  # use first to create agrr matrix
+                # n_decoders = len(model.decoder_dict)
+                # n_nodes = len(model.decoder_dict[0].coef_[0])
+                # assert n_nodes == model.info_dict['n_nodes'], f'n nodes error: coef: {n_nodes}, info dict: {model.info_dict["n_nodes"]}'
+                weight_mat = np.zeros((len(list_models), 8))
+            else:  #TODO: fix check
+                if check_info_dict: # check if dicts with info are equal
+                    for cp in check_params:
+                        assert (model.info_dict[cp] == prev_model.info_dict[cp]), f'AssertionError: models {prev_name} and {mn} are different'
+                    assert (model.info_dict['eval_times'] == prev_model.info_dict['eval_times']).all(), f'AssertionError: models {prev_name} and {mn} are different'
+            for i_dec, dec in model.decoder_dict.items():
+                input_mat = next(model.lin_input.parameters()).detach().numpy()
+                weight_mat[ii, :] = np.mean(np.abs(input_mat), 0)# add score matrix
+            prev_model = model
+            prev_name = mn
+            f.close()
+        return weight_mat
