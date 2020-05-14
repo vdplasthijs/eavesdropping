@@ -267,9 +267,9 @@ def bptt_training(rnn, optimiser, dict_training_params,
         return rnn
 
 def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
-                  save_inplace=True, label_name='alpha', sparsity_c=1e-1):
+                  save_inplace=True, label_name='beta', sparsity_c=3e-1):
     n_nodes = rnn_model.info_dict['n_nodes']
-    forw_mat = {'train': np.zeros((x_train.shape[0], x_train.shape[1], n_nodes)),
+    forw_mat = {'train': np.zeros((x_train.shape[0], x_train.shape[1], n_nodes)),  # trials x time x neurons
                 'test': np.zeros((x_test.shape[0], x_test.shape[1], n_nodes))}
 
     rnn_model.eval()
