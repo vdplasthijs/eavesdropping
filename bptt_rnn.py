@@ -1,3 +1,12 @@
+# @Author: Thijs L van der Plas <TL>
+# @Date:   2020-05-14
+# @Email:  thijs.vanderplas@dtc.ox.ac.uk
+# @Filename: bptt_rnn.py
+# @Last modified by:   thijs
+# @Last modified time: 2020-05-25
+
+
+
 import numpy as np
 import torch
 from torch import nn
@@ -326,7 +335,7 @@ def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
     if save_inplace:
         rnn_model.decoding_crosstemp_score = score_mat
         rnn_model.decoder_dict = decoder_dict
-    return score_mat, decoder_dict
+    return score_mat, decoder_dict, forw_mat
 
 def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/'):
     try:
@@ -357,7 +366,7 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/'):
             # score_mat, decoder_dict = train_decoder(rnn_model=rnn, x_train=x_train, x_test=x_test,
             #                                         labels_train=labels_train, labels_test=labels_test,
             #                                         save_inplace=True)
-            score_mat, decoder_dict = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
+            score_mat, decoder_dict, _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
                                                             n_samples=None, ratio_train=0.8, verbose=False)
 
             ## Save results:
@@ -367,7 +376,8 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/'):
         print('KeyboardInterrupt, exit')
 
 def train_single_decoder_new_data(rnn, ratio_expected=0.5,
-                                  n_samples=None, ratio_train=0.8, verbose=False):
+                                  n_samples=None, ratio_train=0.8, verbose=False,
+                                  sparsity_c=0.1):
     '''Generates new data, and then trains the decoder via train_decoder()'''
     if n_samples is None:
         n_samples = rnn.info_dict['n_total']
@@ -385,10 +395,12 @@ def train_single_decoder_new_data(rnn, ratio_expected=0.5,
     if verbose > 0:
         print('train labels ', {x: np.sum(labels_train == x) for x in np.unique(labels_train)})
     ## Train decoder:
-    score_mat, decoder_dict = train_decoder(rnn_model=rnn, x_train=x_train, x_test=x_test,
+    score_mat, decoder_dict, forward_mat = train_decoder(rnn_model=rnn, x_train=x_train, x_test=x_test,
                                            labels_train=labels_train, labels_test=labels_test,
-                                           save_inplace=True)
-    return score_mat, decoder_dict
+                                           save_inplace=True, sparsity_c=sparsity_c, label_name='alpha')
+    forward_mat['labels_train'] = labels_train
+    forward_mat['labels_test'] = labels_test
+    return score_mat, decoder_dict, forward_mat
 
 def train_multiple_decoders(rnn_folder='models/', ratio_expected=0.5,
                             n_samples=None, ratio_train=0.8):
