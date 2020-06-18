@@ -101,4 +101,25 @@ def create_color_mat(x, c):
     c_mat[:, 3] = np.linspace(0.17, 1, len(x) - 1)
     return c_mat
 
-    
+
+def rmse_matrix_symm(matrix, subtract=0.5):
+    '''Return RMSE of the two upper-/lower-diagonal triangular halves'''
+    n, _ = np.shape(matrix)
+    rmse = 0
+    low_tri_sum = 0
+    n_el = 0
+    matrix = matrix - subtract
+    shuffled_matrix = matrix.copy()
+    np.random.shuffle(shuffled_matrix)
+    assert n == _
+    for i_row in range(1, n):
+        for i_col in range(i_row):
+            low_item = matrix[i_row, i_col]
+            up_item = matrix[i_col, i_row]
+            low_tri_sum += np.abs(shuffled_matrix[i_row, i_col] - shuffled_matrix[i_col, i_row])
+            rmse += np.abs(low_item - up_item)
+            n_el += 1
+    rmse /= n_el
+    rmse = np.sqrt(rmse)
+    low_tri_sum /= n_el
+    return (rmse, low_tri_sum)

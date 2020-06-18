@@ -93,16 +93,16 @@ def plot_train_test_perf(rnn_model, ax=None):
     ax.set_xlabel('Epoch'); ax.set_ylabel("Loss"); ax.legend();
     return ax
 
-def plot_decoder_crosstemp_perf(score_matrix, ax=None, ticklabels='',
+def plot_decoder_crosstemp_perf(score_matrix, ax=None, ticklabels='', cmap_hm = 'BrBG', v_max=None,
                                 save_fig=False, fig_name='figures/example_low_crosstempmat.pdf'):
     '''Plot matrix of cross temporal scores for decoding'''
     if ax is None:
         ax = plt.subplot(111)
     # cmap_hm = sns.diverging_palette(145, 280, s=85, l=25, n=20)
-    cmap_hm = 'BrBG'
+
     # cmap_hm = 'Greys'
     hm = sns.heatmap(score_matrix, cmap=cmap_hm, xticklabels=ticklabels,
-                           yticklabels=ticklabels, ax=ax, vmin=0,# vmax=1,
+                           yticklabels=ticklabels, ax=ax, vmin=0, vmax=v_max,
                            linewidths=0.1, linecolor='k')
     bottom, top = ax.get_ylim()
     ax.set_ylim(bottom + 0.5, top - 0.5)
@@ -112,10 +112,12 @@ def plot_decoder_crosstemp_perf(score_matrix, ax=None, ticklabels='',
         plt.savefig(fig_name, bbox_inches='tight')
     return ax
 
-def plot_raster_trial_average(forw, ax=plt.subplot(111), save_fig=False,
+def plot_raster_trial_average(forw, ax=None, save_fig=False,
                               fig_name='figures/example_high_forward_difference.pdf'):
     labels_use_1 = np.array([x[0] == '1' for x in forw['labels_train']])
     labels_use_2 = np.array([x[0] == '2' for x in forw['labels_train']])
+    if ax is None:
+        ax = plt.subplot(111)
 
     plot_diff = (forw['train'][labels_use_1, :, :].mean(0) - forw['train'][labels_use_2, :, :].mean(0))
     ol = opt_leaf(plot_diff, dim=1)  # optimal leaf sorting
@@ -125,17 +127,18 @@ def plot_raster_trial_average(forw, ax=plt.subplot(111), save_fig=False,
     #     rev_ol[el_ol] = i_ol
     plot_diff = plot_diff[:, ol]
     th = np.max(np.abs(plot_diff)) # threshold for visualisation
-    hm = sns.heatmap(plot_diff.T, cmap='PiYG', vmin=-1 * th, vmax=th, ax=ax,
+    sns.heatmap(plot_diff.T, cmap='PiYG', vmin=-1 * th, vmax=th, ax=ax,
                      xticklabels=double_time_labels_blank[:-1])
-    bottom, top = hm.get_ylim()
-    hm.set_ylim(bottom + 0.5, top - 0.5)
-    plt.title('Activity difference between green and pink trials', weight='bold')
-    plt.xlabel('Time'); plt.ylabel('neuron id');
+    bottom, top = ax.get_ylim()
+    ax.set_ylim(bottom + 0.5, top - 0.5)
+    ax.set_title('Activity difference between green and pink trials', weight='bold')
+    ax.set_xlabel('Time'); ax.set_ylabel('neuron id');
     if save_fig:
         plt.savefig(fig_name, bbox_inches='tight')
-    return hm, ol
+    return ol
 
-def plot_dynamic_decoding_axes(rnn, ticklabels=''):
+def plot_dynamic_decoding_axes(rnn, ticklabels=double_time_labels_blank[:-1],
+                               neuron_order=None):
     '''Plot the decoding axis w for each time point; and the diagonal auto-decoding
     accuracy on top. Returns these two axes. '''
     # if ax is None:
@@ -144,7 +147,10 @@ def plot_dynamic_decoding_axes(rnn, ticklabels=''):
     decoder_axes = np.zeros((rnn.decoder_dict[0].coef_.size, len(rnn.decoder_dict)))
     for k, v in rnn.decoder_dict.items():
         decoder_axes[:, k] = v.coef_
-    cutoff_w = np.percentile(np.abs(decoder_axes), 95)
+    cutoff_w = np.percentile(np.abs(decoder_axes), 99)
+    if neuron_order is not None:
+        assert len(neuron_order) == decoder_axes.shape[0]
+        decoder_axes = decoder_axes[neuron_order, :]
 
     ax_dec_diag = plt.subplot(3, 1, 1)
     ax_dec_diag.plot(np.diag(rnn.decoding_crosstemp_score), linewidth=3,
@@ -157,7 +163,7 @@ def plot_dynamic_decoding_axes(rnn, ticklabels=''):
 
     plt.subplot(3, 1, (2, 3))
     ax_dec_w = sns.heatmap(decoder_axes, xticklabels=ticklabels,
-                          vmin=-1 * cutoff_w, vmax=cutoff_w, cmap='PiYG', cbar=False)
+                          vmin=-1 * cutoff_w, vmax=cutoff_w, cmap='PiYG_r', cbar=False)
     bottom, top = ax_dec_w.get_ylim()
     ax_dec_w.set_ylim(bottom + 0.5, top - 0.5)
     ax_dec_w.set_xlabel('Time t'); ax_dec_w.set_ylabel('Neuron');
@@ -236,10 +242,12 @@ def plot_summary_ratios(agg_weights, agg_decoder_mat, agg_score,
 
     return (ax_abs_w, ax_dec_w, ax_dec_perf)
 
-def plot_alpha_beta_performance(alpha_perf, beta_perf, ax=plt.subplot(111),
+def plot_alpha_beta_performance(alpha_perf, beta_perf, ax=None,
                                 time_labels=double_time_labels_blank[:-1],
                                 save_fig=False, fig_name='figures/alpha_beta_decoding_75.pdf'):
     '''Plot two lines - alpha_perf & beta_perf'''
+    if ax is None:
+        ax = plt.subplot(111)
     ax.plot(alpha_perf, alpha=0.9, color='k',
                   marker='', linewidth=6, markersize=18, label=r"colour$\mathregular{_{AB}}$")
     ax.plot(beta_perf, alpha=0.9, color='k', linestyle='--',
@@ -256,10 +264,13 @@ def plot_alpha_beta_performance(alpha_perf, beta_perf, ax=plt.subplot(111),
         plt.savefig(fig_name, bbox_inches='tight')
     return ax
 
-def plot_stable_switch_bar_diagram(stable_list, switch_list, ax=plt.subplot(111), bar_width=0.35,
+def plot_stable_switch_bar_diagram(stable_list, switch_list, ax=None, bar_width=0.35,
                                    save_fig=False, fig_name='figures/stable_switch_correlated.pdf'):
     '''Plot bar diagram of number of stable & switch neurons '''
     assert len(stable_list) == len(switch_list)
+    if ax is None:
+        ax = plt.subplot(111)
+
     bar_locs = np.arange(len(stable_list))
     bar_stable = ax.bar(bar_locs - bar_width / 2, stable_list,
                          width=bar_width, label='stable', color='#6699FF')  # plot bar
@@ -330,8 +341,11 @@ def plot_arrow_line(x, y, ax=None, c='blue',
     return ax
 
 def plot_two_neuron_state_space(activity_1, activity_2, mean_ls_dict,
-                                max_tp=17, ax=plt.subplot(111), save_fig=False,
+                                max_tp=17, ax=None, save_fig=False,
                                 fig_name='figures/example_med_statespace_stable-switch.pdf'):
+    if ax is None:
+        ax = plt.subplot(111)
+
     n1 = list(activity_1.keys())[0]
     n2 = list(activity_1.keys())[1]
     mean_n1 = (activity_1[n1] + activity_2[n1]) / 2
@@ -351,4 +365,19 @@ def plot_two_neuron_state_space(activity_1, activity_2, mean_ls_dict,
 
     if save_fig:
         plt.savefig(fig_name, bbox_inches='tight')
+    return ax
+
+
+def plot_trial_activity(forw, ax, neuron_order=None, n_trial=0):
+    tmp_act = forw['test'][n_trial, :, :].T
+    if neuron_order is None:
+        neuron_order is np.arange(tmp_act.shape[0])
+    tmp_act = np.squeeze(tmp_act[neuron_order, :])
+    sns.heatmap(tmp_act, vmin=-1.5, vmax=1.5, cmap='RdBu_r',
+                xticklabels=double_time_labels_blank[:-1], ax=ax)
+    bottom, top = ax.get_ylim()
+    ax.set_ylim(bottom + 0.5, top - 0.5)
+
+    ax.set_ylabel('neuron id'); ax.set_xlabel('time');
+    ax.set_title(f'Activity of {forw["labels_test"][n_trial]} trial')
     return ax
