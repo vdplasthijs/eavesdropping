@@ -10,6 +10,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import pickle
 import scipy.cluster, scipy.spatial
 import bptt_rnn as bp
 import rot_utilities as ru
@@ -27,6 +28,7 @@ double_time_labels_blank = [x.replace('0', '') for x in double_time_labels]
 single_time_labels_blank = [x.replace('0', '') for x in single_time_labels]
 assert len(double_time_labels_half) == len(double_time_labels)
 freq_labels = ['0', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D']
+freq_labels_sub = [r"$0$", r"$A_1$", r"$A_2$", r"$B_1$", r"$B_2$", r"$C_1$", r"$C_2$", r"$D$"]
 
 def plot_weights(rnn_layer, ax=None, title='weights', xlabel='',
                  ylabel='', xticklabels=None, yticklabels=None,
@@ -84,16 +86,20 @@ def opt_leaf(w_mat, dim=0):
     opt_leaves = scipy.cluster.hierarchy.leaves_list(scipy.cluster.hierarchy.optimal_leaf_ordering(link_mat, dist))
     return opt_leaves
 
-def plot_train_test_perf(rnn_model, ax=None):
+def plot_train_test_perf(rnn_model, ax=None, train=True, test=True):
     '''Plot train and test loss as function of epoch.'''
     if ax is None:
         ax = plt.subplot(111)
-    ax.plot(rnn_model.train_loss_arr, label='train', linewidth=3)
-    ax.plot(rnn_model.test_loss_arr, label='test', linewidth=3)
-    ax.set_xlabel('Epoch'); ax.set_ylabel("Loss"); ax.legend();
+    if train:
+        ax.plot(rnn_model.train_loss_arr, label='train', linewidth=3, color='k', linestyle=':')
+    if test:
+        ax.plot(rnn_model.test_loss_arr, label='test', linewidth=3, color='k')
+    ax.set_xlabel('Epoch'); ax.set_ylabel("Loss");
+    if train and test:
+        ax.legend();
     return ax
 
-def plot_decoder_crosstemp_perf(score_matrix, ax=None, ticklabels='', cmap_hm = 'BrBG', v_max=None,
+def plot_decoder_crosstemp_perf(score_matrix, ax=None, ticklabels='', cmap_hm = 'BrBG', v_max=None, c_bar=True,
                                 save_fig=False, fig_name='figures/example_low_crosstempmat.pdf'):
     '''Plot matrix of cross temporal scores for decoding'''
     if ax is None:
@@ -101,7 +107,7 @@ def plot_decoder_crosstemp_perf(score_matrix, ax=None, ticklabels='', cmap_hm = 
     # cmap_hm = sns.diverging_palette(145, 280, s=85, l=25, n=20)
 
     # cmap_hm = 'Greys'
-    hm = sns.heatmap(score_matrix, cmap=cmap_hm, xticklabels=ticklabels,
+    hm = sns.heatmap(score_matrix, cmap=cmap_hm, xticklabels=ticklabels, cbar=c_bar,
                            yticklabels=ticklabels, ax=ax, vmin=0, vmax=v_max,
                            linewidths=0.1, linecolor='k')
     bottom, top = ax.get_ylim()
@@ -112,7 +118,7 @@ def plot_decoder_crosstemp_perf(score_matrix, ax=None, ticklabels='', cmap_hm = 
         plt.savefig(fig_name, bbox_inches='tight')
     return ax
 
-def plot_raster_trial_average(forw, ax=None, save_fig=False,
+def plot_raster_trial_average(forw, ax=None, save_fig=False, reverse_order=False, c_bar=True,
                               fig_name='figures/example_high_forward_difference.pdf'):
     labels_use_1 = np.array([x[0] == '1' for x in forw['labels_train']])
     labels_use_2 = np.array([x[0] == '2' for x in forw['labels_train']])
@@ -121,6 +127,8 @@ def plot_raster_trial_average(forw, ax=None, save_fig=False,
 
     plot_diff = (forw['train'][labels_use_1, :, :].mean(0) - forw['train'][labels_use_2, :, :].mean(0))
     ol = opt_leaf(plot_diff, dim=1)  # optimal leaf sorting
+    if reverse_order:
+        ol = ol[::-1]
     # ol = np.argsort(plot_diff.sum(0))
     # rev_ol = np.zeros_like(ol) # make reverse mapping of OL
     # for i_ol, el_ol in enumerate(ol):
@@ -128,10 +136,10 @@ def plot_raster_trial_average(forw, ax=None, save_fig=False,
     plot_diff = plot_diff[:, ol]
     th = np.max(np.abs(plot_diff)) # threshold for visualisation
     sns.heatmap(plot_diff.T, cmap='PiYG', vmin=-1 * th, vmax=th, ax=ax,
-                     xticklabels=double_time_labels_blank[:-1])
+                     xticklabels=double_time_labels_blank[:-1], cbar=c_bar)
     bottom, top = ax.get_ylim()
-    ax.set_ylim(bottom + 0.5, top - 0.5)
-    ax.set_title('Activity difference between green and pink trials', weight='bold')
+    ax.set_ylim(bottom + 1.5, top - 0.5)
+    ax.set_title('Activity difference between green and purple trials', weight='bold')
     ax.set_xlabel('Time'); ax.set_ylabel('neuron id');
     if save_fig:
         plt.savefig(fig_name, bbox_inches='tight')
@@ -169,19 +177,21 @@ def plot_dynamic_decoding_axes(rnn, ticklabels=double_time_labels_blank[:-1],
     ax_dec_w.set_xlabel('Time t'); ax_dec_w.set_ylabel('Neuron');
     return ax_dec_diag, ax_dec_w
 
-def plot_example_trial(trial, ax=None, yticklabels=freq_labels,
-                       xticklabels=double_time_labels_blank[1:],
-                       vmin=0, vmax=1):
+def plot_example_trial(trial, ax=None, yticklabels=freq_labels_sub,
+                       xticklabels=double_time_labels_blank[1:], c_bar=True,
+                       vmin=0, vmax=1, c_map='magma', print_labels=True):
     '''Plot 1 example trial'''
     if ax is None:
         ax = plt.subplot(111)
 
-    sns.heatmap(trial.T, yticklabels=yticklabels,
+    sns.heatmap(trial.T, yticklabels=yticklabels, cmap=c_map, cbar=c_bar,
             xticklabels=xticklabels, ax=ax, vmin=vmin, vmax=vmax)
     bottom, top = ax.get_ylim()
     ax.set_ylim(bottom + 0.5, top - 0.5)
-    ax.set_xlabel('Time')
-    ax.set_ylabel('Stimulus vector')
+    ax.set_yticklabels(labels=yticklabels, rotation=0)
+    if print_labels:
+        ax.set_xlabel('Time')
+        ax.set_ylabel('Stimulus vector')
     return ax
 
 def plot_time_trace_1_decoding_neuron(rnn, n_neuron=3, ax=None):
@@ -312,36 +322,56 @@ def plot_neuron_diff(ax_select, act_1, act_2, mean_ls='-',
     sns.despine()
     return ax_select
 
-def plot_arrow_line(x, y, ax=None, c='blue',
-                    sens_times=np.arange(2, 8), mem_times=np.arange(8, 11)):
+def plot_arrow_line(x, y, ax=None, c='blue', verbose=False, swap_x=False, swap_y=False,
+                    sens_times=np.arange(2, 8), mem_times=np.arange(8, 11), draw_sens_mem=False):
     if ax is None:
         ax = plt.subplot(111)
     c_mat = ru.create_color_mat(x=x, c=c)
 #     ax.quiver(x[:-1], y[:-1], x[1:]-x[:-1], y[1:]-y[:-1], width=.02,
 #               scale_units='xy', angles='xy', scale=1, color=c_mat)
-    y = -1 * y
-    x = -1 * x
+    if swap_y:
+        y = -1 * y
+    if swap_x:
+        x = -1 * x
     x_sens = np.mean(x[sens_times])
     y_sens = np.mean(y[sens_times])
     x_mem = np.mean(x[mem_times])
     y_mem = np.mean(y[mem_times])
-    print('sens', x_sens.round(2), y_sens.round(2))
-    print('mem', x_mem.round(2), y_mem.round(2))
+    if verbose:
+        print('sens', x_sens.round(2), y_sens.round(2))
+        print('mem', x_mem.round(2), y_mem.round(2))
+    traj_width = {True: 3, False: 7}
     for ii in range(len(x) - 1):
-        ax.plot(x[ii:(ii + 2)], y[ii:(ii + 2)], c=c_mat[ii, :], linewidth=7)
+        ax.plot(x[ii:(ii + 2)], y[ii:(ii + 2)], c=c_mat[ii, :], linewidth=traj_width[draw_sens_mem], zorder=1)
 #     ax.plot(x, y, color=c_mat)
-    plt.scatter(x_sens, y_sens, marker='x', s=50, c=c_mat[-1, :][np.newaxis, :])
-    plt.scatter(x_mem, y_mem, marker='o', s=50, c=c_mat[-1, :][np.newaxis, :])
+    # plt.scatter(x_sens, y_sens, marker='x', s=50, c=c_mat[-1, :][np.newaxis, :])
+    # plt.scatter(x_mem, y_mem, marker='o', s=50, c=c_mat[-1, :][np.newaxis, :])
+    if draw_sens_mem:
+        if c == 'm':
+            ax.quiver([0, x_sens], [0, y_sens], [x_sens, 0], [y_sens, 0],  width=.02,
+                          scale_units='xy', angles='xy', scale=1, color='blue', zorder=2)
+            ax.quiver([0, x_mem], [0, y_mem], [x_mem, 0], [y_mem, 0],  width=.02,
+                      scale_units='xy', angles='xy', scale=1, color='k', zorder=2)
     ax.set_axis_off()
     ax.set_xlim([-1, 1]); ax.set_ylim([-1, 1])
-    ax.text(s='-1', x=0.96, y=-0.1, fontdict={'fontsize': 12})
-    ax.text(s='-1', x=-0.11, y=0.96, fontdict={'fontsize': 12})
-    ax.text(s='1', x=-1, y=-0.1, fontdict={'fontsize': 12})
-    ax.text(s='1', x=-0.08, y=-1.04, fontdict={'fontsize': 12})
+    if swap_x:
+        ax.text(s='-1', x=0.96, y=-0.1, fontdict={'fontsize': 12})
+        ax.text(s='1', x=-1, y=-0.1, fontdict={'fontsize': 12})
+    elif not swap_x:
+        ax.text(s='1', x=1, y=-0.1, fontdict={'fontsize': 12})
+        ax.text(s='-1', x=-1.02, y=-0.1, fontdict={'fontsize': 12})
+    if swap_y:
+        ax.text(s='-1', x=-0.11, y=0.96, fontdict={'fontsize': 12})
+        ax.text(s='1', x=-0.08, y=-1.04, fontdict={'fontsize': 12})
+    elif not swap_y:
+        ax.text(s='1', x=-0.08, y=0.96, fontdict={'fontsize': 12})
+        ax.text(s='-1', x=-0.11, y=-1.04, fontdict={'fontsize': 12})
     return ax
 
-def plot_two_neuron_state_space(activity_1, activity_2, mean_ls_dict,
-                                max_tp=17, ax=None, save_fig=False,
+def plot_two_neuron_state_space(activity_1, activity_2, mean_ls_dict, swap_x=False, swap_y=False,
+                                max_tp=17, ax=None, save_fig=False, font_size=16,
+                                x_name='Stable neuron', y_name='Switch neuron',
+                                draw_sens_mem=False,
                                 fig_name='figures/example_med_statespace_stable-switch.pdf'):
     if ax is None:
         ax = plt.subplot(111)
@@ -354,14 +384,16 @@ def plot_two_neuron_state_space(activity_1, activity_2, mean_ls_dict,
     ax.plot([0, 0], [-1, 1], c='k', linewidth=2, linestyle=mean_ls_dict[0])  # y axis - so correspond to neuron on x axis
 
     _ = plot_arrow_line(activity_1[n1][:max_tp] - mean_n1[:max_tp],
-             activity_1[n2][:max_tp] - mean_n2[:max_tp], c='green', ax=ax)
+             activity_1[n2][:max_tp] - mean_n2[:max_tp], c='green',
+             draw_sens_mem=draw_sens_mem, ax=ax, swap_x=swap_x, swap_y=swap_y)
     _ = plot_arrow_line(activity_2[n1][:max_tp] - mean_n1[:max_tp],
-             activity_2[n2][:max_tp] - mean_n2[:max_tp], c='m', ax=ax)
+             activity_2[n2][:max_tp] - mean_n2[:max_tp], c='m',
+             draw_sens_mem=draw_sens_mem, ax=ax, swap_x=swap_x, swap_y=swap_y)
     # ax.set_title('State space', weight='bold')
-    ax.text(s='Stable neuron', x=0.65, y=-0.25,
-               fontdict={'fontsize': 16})
-    ax.text(s='Switch neuron', x=-0.4, y=1.1,
-               fontdict={'fontsize': 16})
+    ax.text(s=x_name, x=0.65, y=-0.25,
+               fontdict={'fontsize': font_size})
+    ax.text(s=y_name, x=-0.4, y=1.1,
+               fontdict={'fontsize': font_size})
 
     if save_fig:
         plt.savefig(fig_name, bbox_inches='tight')
@@ -373,7 +405,7 @@ def plot_trial_activity(forw, ax, neuron_order=None, n_trial=0):
     if neuron_order is None:
         neuron_order is np.arange(tmp_act.shape[0])
     tmp_act = np.squeeze(tmp_act[neuron_order, :])
-    sns.heatmap(tmp_act, vmin=-1.5, vmax=1.5, cmap='RdBu_r',
+    sns.heatmap(tmp_act, vmin=-1, vmax=1, cmap='RdBu_r',
                 xticklabels=double_time_labels_blank[:-1], ax=ax)
     bottom, top = ax.get_ylim()
     ax.set_ylim(bottom + 0.5, top - 0.5)
@@ -381,3 +413,100 @@ def plot_trial_activity(forw, ax, neuron_order=None, n_trial=0):
     ax.set_ylabel('neuron id'); ax.set_xlabel('time');
     ax.set_title(f'Activity of {forw["labels_test"][n_trial]} trial')
     return ax
+
+def plot_convergence_rnn(rnn, save_fig=False, verbose=False,
+                         fig_name='figures/convergence_training.pdf'):
+    # plt.subplot(211)
+    ax_conv = plot_train_test_perf(rnn_model=rnn, ax=plt.subplot(211), train=False)
+    # plt.ylim([1.2, 2])
+    ax_conv.text(s='Test loss during training', x=5, y=7, fontdict={'weight': 'bold'})
+    ax_conv.set_ylabel('Total loss')
+
+    ax_ratio_ce = plt.subplot(212)
+    ax_ratio_ce.plot(np.arange(rnn.info_dict['trained_epochs']),
+             np.zeros_like(rnn.test_loss_ratio_ce) + 0.5, c='grey', linestyle=':')
+    ax_ratio_ce.plot(rnn.test_loss_ratio_ce, linewidth=3, c='k', linestyle='--')
+    ax_ratio_ce.set_xlabel('Epoch'); ax_ratio_ce.set_ylabel('ratio CE loss');
+    ax_ratio_ce.text(s='Ratio Cross Entropy / Total loss', x=5, y=0.8,
+                     fontdict={'weight': 'bold'});
+    sns.despine()
+    if verbose:
+        print(f'Final test performance: {np.round(rnn.test_loss_arr[-1], 3)}')
+    if save_fig:
+        plt.savefig(fig_name, bbox_inches='tight')
+    return(ax_conv, ax_ratio_ce)
+
+
+def plot_multiple_rnn_properties(rnn_name_dict, rnn_folder):
+    n_rnn = len(rnn_name_dict)
+    n_panels = 5
+    rnn = {}
+    i_rnn = 0
+    mean_ls_dict = {0: '-', 1: '--'}
+    neuron_selection = {'low': [0, 19], 'med': [0, 5], 'high': [19, 2]}
+    title_selection = {'low': ['neuron 0 (Switch)', 'neuron 19 (Switch)'],
+                       'med': ['neuron 0 (Stable)', 'neuron 5 (Switch)'],
+                       'high': ['neuron 19 (Stable)', 'neuron 2 (Stable)']}
+    rnn_title_dict = {'low': 'C) Anti-correlated coding', 'med': 'B) Decorrelated coding',
+                      'high': 'A) Correlated coding'}
+    swap_x_dict = {'low': True, 'med': True, 'high': False}
+    swap_y_dict = {'low': False, 'med': True, 'high': True}
+    ax_rast, ax_single, ax_ss, ax_ss_arr, ax_ctmat, ol = {}, {}, {}, {}, {}, {}
+    for key, rnn_name in rnn_name_dict.items():
+        with open(rnn_folder + rnn_name, 'rb') as f:
+            rnn[key] = pickle.load(f)
+        _, __, forw  = bp.train_single_decoder_new_data(rnn=rnn[key], ratio_expected=0.5, sparsity_c=0.1)
+        labels_use_1 = np.array([x[0] == '1' for x in forw['labels_test']])
+        labels_use_2 = np.array([x[0] == '2' for x in forw['labels_test']])
+
+        ## raster plot
+        ax_rast[key] = plt.subplot(n_panels, n_rnn, 1 + i_rnn)
+        ol[key] = plot_raster_trial_average(forw=forw, ax=ax_rast[key], reverse_order=(key == 'low'), c_bar=False)
+        ax_rast[key].set_title(rnn_title_dict[key], weight='bold')
+
+        ## single examples
+        ax_single[key] = {}  # plt.subplot(n_panels, n_rnn, 2 + (i_rnn * n_panels))
+        activity_1, activity_2 = {}, {}
+        for i_plot, n_neuron in enumerate([ol[key][neuron_selection[key][xx]] for xx in range(2)]): # two pre selected neurons
+            ax_single[key][i_plot] = plt.subplot(n_panels * 2, n_rnn, 7 + (i_plot * 3) + i_rnn)
+            activity_1[n_neuron] = forw['test'][labels_use_1, :, :][:, :, n_neuron].mean(0)
+            activity_2[n_neuron] = forw['test'][labels_use_2, :, :][:, :, n_neuron].mean(0)
+            ax_single[key][i_plot] = plot_neuron_diff(ax_select=ax_single[key][i_plot],
+                                                      act_1=activity_1[n_neuron],
+                                                      act_2=activity_2[n_neuron],
+                                                      mean_ls=mean_ls_dict[i_plot])
+            ax_single[key][i_plot].set_title(f'Example {title_selection[key][i_plot]}', weight='bold')
+            ax_single[key][i_plot].set_ylim([-1, 1.5])
+            ax_single[key][i_plot].set_ylabel('')
+            ax_single[key][i_plot].set_xlabel('')
+            if i_plot == 0:
+                ax_single[key][i_plot].set_xticklabels(['' for x in range(len(double_time_labels_blank[:-1]))])
+
+        ## state space
+        ax_ss[key] = plt.subplot(n_panels, n_rnn, 7 + i_rnn)
+        plot_two_neuron_state_space(activity_1=activity_1, activity_2=activity_2, font_size=10,
+                                   mean_ls_dict=mean_ls_dict, save_fig=False, ax=ax_ss[key],
+                                   swap_x=swap_x_dict[key], swap_y=swap_y_dict[key])
+        # ax_ss[key].set_xlim([-1, 1])
+        # ax_ss[key].set_ylim([-1, 1])
+
+
+        ## state space with arrows
+        ax_ss_arr[key] = plt.subplot(n_panels, n_rnn, 10 + i_rnn)
+        plot_two_neuron_state_space(activity_1=activity_1, activity_2=activity_2, font_size=10,
+                                    mean_ls_dict=mean_ls_dict, save_fig=False, ax=ax_ss_arr[key],
+                                    swap_x=swap_x_dict[key], swap_y=swap_y_dict[key],
+                                    draw_sens_mem=True)
+        # ax_ss_arr[key].set_xlim([-0.9, 0.9])
+        # ax_ss_arr[key].set_ylim([-0.9, 0.9])
+
+        ## CT matrix
+        ax_ctmat[key] = plt.subplot(n_panels, n_rnn, 13 + i_rnn)
+        _ = plot_decoder_crosstemp_perf(score_matrix=rnn[key].decoding_crosstemp_score,
+                               ax=ax_ctmat[key], c_bar=False,
+                               ticklabels=double_time_labels_blank[:-1])
+        ax_ctmat[key].set_title('')
+
+
+        i_rnn += 1
+    return None
