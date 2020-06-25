@@ -9,6 +9,9 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from mpl_toolkits.axes_grid1.colorbar import colorbar as mpl_colorbar
 import seaborn as sns
 import pickle
 import scipy.cluster, scipy.spatial
@@ -112,11 +115,11 @@ def plot_decoder_crosstemp_perf(score_matrix, ax=None, ticklabels='', cmap_hm = 
                            linewidths=0.1, linecolor='k')
     bottom, top = ax.get_ylim()
     ax.set_ylim(bottom + 0.5, top - 0.5)
-    ax.set_ylabel('Training time tau'); ax.set_xlabel('Testing time t')
+    ax.set_ylabel('Training time ' + r"$\tau$"); ax.set_xlabel('Testing time t')
     ax.set_title('Cross-temporal decoding score\nCorrelated single example', weight='bold');
     if save_fig:
         plt.savefig(fig_name, bbox_inches='tight')
-    return ax
+    return (ax, hm)
 
 def plot_raster_trial_average(forw, ax=None, save_fig=False, reverse_order=False, c_bar=True,
                               fig_name='figures/example_high_forward_difference.pdf'):
@@ -317,12 +320,15 @@ def plot_neuron_diff(ax_select, act_1, act_2, mean_ls='-',
     ax_select.set_xticklabels(time_labels);
     ax_select.set_ylim([-1, 1.3])
     for i_letter, letter in enumerate(['A', 'B', 'C', 'D']):
-        ax_select.text(s=letter, x=2.02 + 4 * i_letter, y=1.01,
+        ax_select.text(s=letter, x=1.8 + 4 * i_letter, y=1.15,
                        fontdict={'weight': 'bold', 'fontsize': 18})
-    sns.despine()
+    ax_select.spines['top'].set_visible(False)
+    ax_select.spines['right'].set_visible(False)
     return ax_select
 
-def plot_arrow_line(x, y, ax=None, c='blue', verbose=False, swap_x=False, swap_y=False,
+def plot_arrow_line(x, y, ax=None, c='blue', verbose=False, swap_x=False,
+                    swap_y=False, draw_time=False, draw_names_sens_mem=False,
+                    color_sense='#8da0cb', color_mem='#fc8d62',
                     sens_times=np.arange(2, 8), mem_times=np.arange(8, 11), draw_sens_mem=False):
     if ax is None:
         ax = plt.subplot(111)
@@ -341,7 +347,7 @@ def plot_arrow_line(x, y, ax=None, c='blue', verbose=False, swap_x=False, swap_y
         print('sens', x_sens.round(2), y_sens.round(2))
         print('mem', x_mem.round(2), y_mem.round(2))
     traj_width = {True: 3, False: 7}
-    for ii in range(len(x) - 1):
+    for ii in range(len(x) - 1): # plot trajectores
         ax.plot(x[ii:(ii + 2)], y[ii:(ii + 2)], c=c_mat[ii, :], linewidth=traj_width[draw_sens_mem], zorder=1)
 #     ax.plot(x, y, color=c_mat)
     # plt.scatter(x_sens, y_sens, marker='x', s=50, c=c_mat[-1, :][np.newaxis, :])
@@ -349,29 +355,67 @@ def plot_arrow_line(x, y, ax=None, c='blue', verbose=False, swap_x=False, swap_y
     if draw_sens_mem:
         if c == 'm':
             ax.quiver([0, x_sens], [0, y_sens], [x_sens, 0], [y_sens, 0],  width=.02,
-                          scale_units='xy', angles='xy', scale=1, color='blue', zorder=2)
-            ax.quiver([0, x_mem], [0, y_mem], [x_mem, 0], [y_mem, 0],  width=.02,
-                      scale_units='xy', angles='xy', scale=1, color='k', zorder=2)
-    ax.set_axis_off()
-    ax.set_xlim([-1, 1]); ax.set_ylim([-1, 1])
+                          scale_units='xy', angles='xy', scale=1, color=color_sense, zorder=2)
+            ax.quiver([0, x_mem], [0, y_mem], [x_mem, 0], [y_mem, 0],  width=.02, # edgecolors='k',
+                      scale_units='xy', angles='xy', scale=1, color=color_mem, zorder=2)
+            if draw_names_sens_mem:
+                plt.text(s='sensory experience', x=0.2, y=0.8, c=color_sense)
+                plt.text(s='memory', x=0.05, y=-0.15, c=color_mem)
+    if draw_time:
+        if draw_time == 'high':
+            time_arrow = patches.FancyArrowPatch(posA=(0.2, 0.9), posB=(1.05, 0.1),
+                                                 arrowstyle="Simple, tail_width=0.5, head_width=4, head_length=8",
+                                                 connectionstyle="arc3, rad=-0.5", **{'color' : 'grey'})
+            ax.text(s='Time', x=0.85, y=0.8)
+        elif draw_time == 'med':
+            time_arrow = patches.FancyArrowPatch(posA=(0.2, 0.95), posB=(0.2, -0.8), zorder=-0.5,
+                                                 arrowstyle="Simple, tail_width=0.5, head_width=4, head_length=8",
+                                                 connectionstyle="arc3, rad=-1.15", **{'color' : 'grey'})
+            ax.text(s='Time', x=0.75, y=0.7)
+        elif draw_time == 'low':
+            time_arrow = patches.FancyArrowPatch(posA=(0.15, 0.90), posB=(0.75, 0.15),
+                                                 arrowstyle="Simple, tail_width=0.5, head_width=4, head_length=8",
+                                                 connectionstyle="arc3, rad=-1", **{'color' : 'grey'})
+            time_arrow_1 = patches.FancyArrowPatch(posA=(0.75, 0.15), posB=(0.05, -0.8),
+                                                     arrowstyle="Simple, tail_width=0.5, head_width=4, head_length=8",
+                                                     connectionstyle="arc3, rad=-0.2", **{'color' : 'grey'})
+            time_arrow_2 = patches.FancyArrowPatch(posA=(-0.01, -0.82), posB=(-0.6, -0.1),
+                                                  arrowstyle="Simple, tail_width=0.5, head_width=4, head_length=8",
+                                                  connectionstyle="arc3, rad=-1.3", **{'color' : 'grey'})
+            ax.add_patch(time_arrow_1)
+            ax.add_patch(time_arrow_2)
+            ax.text(s='Time', x=0.9, y=0.8)
+        ax.add_patch(time_arrow)
+    # ax.set_axis_off()
+    # ax.get_xaxis().set_visible(False)
+    ax.set_xticks([])
+
+    # ax.get_yaxis().set_visible(False)
+    ax.set_yticks([])
+
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    # ax.set_xlim([-1, 1]); ax.set_ylim([-1, 1])
     if swap_x:
-        ax.text(s='-1', x=0.96, y=-0.1, fontdict={'fontsize': 12})
-        ax.text(s='1', x=-1, y=-0.1, fontdict={'fontsize': 12})
+        ax.text(s='-1', x=0.96, y=-0.15, fontdict={'fontsize': 12})
+        ax.text(s='1', x=-1, y=-0.15, fontdict={'fontsize': 12})
     elif not swap_x:
-        ax.text(s='1', x=1, y=-0.1, fontdict={'fontsize': 12})
-        ax.text(s='-1', x=-1.02, y=-0.1, fontdict={'fontsize': 12})
+        ax.text(s='1', x=1, y=-0.15, fontdict={'fontsize': 12})
+        ax.text(s='-1', x=-1.02, y=-0.15, fontdict={'fontsize': 12})
     if swap_y:
-        ax.text(s='-1', x=-0.11, y=0.96, fontdict={'fontsize': 12})
-        ax.text(s='1', x=-0.08, y=-1.04, fontdict={'fontsize': 12})
+        ax.text(s='-1', x=-0.16, y=0.96, fontdict={'fontsize': 12})
+        ax.text(s='1', x=-0.12, y=-1.04, fontdict={'fontsize': 12})
     elif not swap_y:
-        ax.text(s='1', x=-0.08, y=0.96, fontdict={'fontsize': 12})
-        ax.text(s='-1', x=-0.11, y=-1.04, fontdict={'fontsize': 12})
+        ax.text(s='1', x=-0.12, y=0.96, fontdict={'fontsize': 12})
+        ax.text(s='-1', x=-0.16, y=-1.04, fontdict={'fontsize': 12})
     return ax
 
 def plot_two_neuron_state_space(activity_1, activity_2, mean_ls_dict, swap_x=False, swap_y=False,
                                 max_tp=17, ax=None, save_fig=False, font_size=16,
                                 x_name='Stable neuron', y_name='Switch neuron',
-                                draw_sens_mem=False,
+                                draw_sens_mem=False, draw_time=False, draw_names_sens_mem=False,
                                 fig_name='figures/example_med_statespace_stable-switch.pdf'):
     if ax is None:
         ax = plt.subplot(111)
@@ -380,19 +424,20 @@ def plot_two_neuron_state_space(activity_1, activity_2, mean_ls_dict, swap_x=Fal
     n2 = list(activity_1.keys())[1]
     mean_n1 = (activity_1[n1] + activity_2[n1]) / 2
     mean_n2 = (activity_1[n2] + activity_2[n2]) / 2
-    ax.plot([-1, 1], [0, 0], c='k', linewidth=2, linestyle=mean_ls_dict[1])  # x axis - so correpsonding to neuron on y axis
-    ax.plot([0, 0], [-1, 1], c='k', linewidth=2, linestyle=mean_ls_dict[0])  # y axis - so correspond to neuron on x axis
+    ax.plot([-1, 1], [0, 0], c='k', linewidth=2, linestyle=mean_ls_dict[1], zorder=0.5)  # x axis - so correpsonding to neuron on y axis
+    ax.plot([0, 0], [-1, 1], c='k', linewidth=2, linestyle=mean_ls_dict[0], zorder=0.5)  # y axis - so correspond to neuron on x axis
 
     _ = plot_arrow_line(activity_1[n1][:max_tp] - mean_n1[:max_tp],
-             activity_1[n2][:max_tp] - mean_n2[:max_tp], c='green',
+             activity_1[n2][:max_tp] - mean_n2[:max_tp], c='green',# draw_time=draw_time,
              draw_sens_mem=draw_sens_mem, ax=ax, swap_x=swap_x, swap_y=swap_y)
     _ = plot_arrow_line(activity_2[n1][:max_tp] - mean_n1[:max_tp],
-             activity_2[n2][:max_tp] - mean_n2[:max_tp], c='m',
-             draw_sens_mem=draw_sens_mem, ax=ax, swap_x=swap_x, swap_y=swap_y)
+             activity_2[n2][:max_tp] - mean_n2[:max_tp], c='m', draw_time=draw_time,
+             draw_sens_mem=draw_sens_mem, ax=ax, swap_x=swap_x, swap_y=swap_y,
+             draw_names_sens_mem=draw_names_sens_mem)
     # ax.set_title('State space', weight='bold')
-    ax.text(s=x_name, x=0.65, y=-0.25,
+    ax.text(s=x_name, x=0.65, y=-0.28,
                fontdict={'fontsize': font_size})
-    ax.text(s=y_name, x=-0.4, y=1.1,
+    ax.text(s=y_name, x=-0.4, y=1.15,
                fontdict={'fontsize': font_size})
 
     if save_fig:
@@ -476,7 +521,7 @@ def plot_multiple_rnn_properties(rnn_name_dict, rnn_folder):
                                                       act_2=activity_2[n_neuron],
                                                       mean_ls=mean_ls_dict[i_plot])
             ax_single[key][i_plot].set_title(f'Example {title_selection[key][i_plot]}', weight='bold')
-            ax_single[key][i_plot].set_ylim([-1, 1.5])
+            ax_single[key][i_plot].set_ylim([-1, 1.65])
             ax_single[key][i_plot].set_ylabel('')
             ax_single[key][i_plot].set_xlabel('')
             if i_plot == 0:
@@ -486,7 +531,10 @@ def plot_multiple_rnn_properties(rnn_name_dict, rnn_folder):
         ax_ss[key] = plt.subplot(n_panels, n_rnn, 7 + i_rnn)
         plot_two_neuron_state_space(activity_1=activity_1, activity_2=activity_2, font_size=10,
                                    mean_ls_dict=mean_ls_dict, save_fig=False, ax=ax_ss[key],
-                                   swap_x=swap_x_dict[key], swap_y=swap_y_dict[key])
+                                   swap_x=swap_x_dict[key], swap_y=swap_y_dict[key],
+                                   draw_time=key,
+                                   x_name=title_selection[key][0][-7:-1] + ' neuron',
+                                   y_name=title_selection[key][1][-7:-1] + ' neuron')
         # ax_ss[key].set_xlim([-1, 1])
         # ax_ss[key].set_ylim([-1, 1])
 
@@ -496,17 +544,38 @@ def plot_multiple_rnn_properties(rnn_name_dict, rnn_folder):
         plot_two_neuron_state_space(activity_1=activity_1, activity_2=activity_2, font_size=10,
                                     mean_ls_dict=mean_ls_dict, save_fig=False, ax=ax_ss_arr[key],
                                     swap_x=swap_x_dict[key], swap_y=swap_y_dict[key],
-                                    draw_sens_mem=True)
+                                    draw_sens_mem=True, x_name=title_selection[key][0][-7:-1] + ' neuron',
+                                    y_name=title_selection[key][1][-7:-1] + ' neuron',
+                                    draw_names_sens_mem=(i_rnn == 0))
         # ax_ss_arr[key].set_xlim([-0.9, 0.9])
         # ax_ss_arr[key].set_ylim([-0.9, 0.9])
 
         ## CT matrix
         ax_ctmat[key] = plt.subplot(n_panels, n_rnn, 13 + i_rnn)
-        _ = plot_decoder_crosstemp_perf(score_matrix=rnn[key].decoding_crosstemp_score,
+        _, hm = plot_decoder_crosstemp_perf(score_matrix=rnn[key].decoding_crosstemp_score,
                                ax=ax_ctmat[key], c_bar=False,
                                ticklabels=double_time_labels_blank[:-1])
         ax_ctmat[key].set_title('')
 
+        if i_rnn == 0:
+            ax_rast[key].set_ylabel('i) raster plot colour preference', weight='bold')
+            ax_single[key][1].set_ylabel('ii) example neurons', weight='bold', y=1.2)
+            ax_ss[key].set_ylabel('iii) state space of \nexample neurons \n ', weight='bold')
+            ax_ss_arr[key].set_ylabel('iv) switch cells rotate \nmemory representation\n ', weight='bold')
+            ax_ctmat[key].set_ylabel('v) cross-temporal \ndecoding accuracy', weight='bold')
+
+        elif i_rnn == (n_rnn - 1):
+            ## Color bar raster  matrix:
+            divider = make_axes_locatable(ax_rast[key])
+            cax_rast = divider.append_axes('right', size='5%', pad=0.01)
+            mpl_colorbar(ax_rast[key].get_children()[0], cax=cax_rast)
+            cax_rast.yaxis.set_ticks_position('right')
+
+            ## Color bar ct matrix:
+            divider = make_axes_locatable(ax_ctmat[key])
+            cax_ct = divider.append_axes('right', size='5%', pad=0.01)
+            mpl_colorbar(hm.get_children()[0], cax=cax_ct)
+            cax_ct.yaxis.set_ticks_position('right')
 
         i_rnn += 1
     return None
