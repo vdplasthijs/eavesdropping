@@ -9,6 +9,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 import matplotlib.patches as patches
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from mpl_toolkits.axes_grid1.colorbar import colorbar as mpl_colorbar
@@ -262,17 +263,20 @@ def plot_alpha_beta_performance(alpha_perf, beta_perf, ax=None,
     if ax is None:
         ax = plt.subplot(111)
     ax.plot(alpha_perf, alpha=0.9, color='k',
-                  marker='', linewidth=6, markersize=18, label=r"colour$\mathregular{_{AB}}$")
-    ax.plot(beta_perf, alpha=0.9, color='k', linestyle='--',
-                  marker='', linewidth=6, markersize=18, label=r'colour$\mathregular{_C}$')
+                  marker='', linewidth=3, markersize=18, label=r"$\alpha$")
+    ax.plot(beta_perf, alpha=0.9, color='k', linestyle=':',
+                  marker='', linewidth=3, markersize=18, label=r'$\beta$')
     ax.set_xticks(np.arange(len(time_labels)))
     ax.set_xticklabels(time_labels);
     ax.set_yticks([0.5, 0.75, 1])
-    ax.set_xlabel('Time'); ax.set_ylabel('Decoding accuracy');
-    ax.legend(bbox_to_anchor=(1,0 , 0, 1), fontsize=20)
+    ax.set_xlabel('Time ' + r'$\to$'); ax.set_ylabel('Accuracy');
+    # ax.legend(bbox_to_anchor=(1,0 , 0, 1), fontsize=20)
+    ax.legend(bbox_to_anchor=(0.75, 0.1, 0, 1))
     # ax.set_title(r'$\alpha$ decoding performance', weight='bold', fontsize=15);
     # ax.axvspan(xmin=10, xmax=17, alpha=0.15)
-    ax.set_xlim([0, 17]); sns.despine()
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.set_xlim([0, 17]);
     if save_fig:
         plt.savefig(fig_name, bbox_inches='tight')
     return ax
@@ -339,8 +343,10 @@ def plot_arrow_line(x, y, ax=None, c='blue', verbose=False, swap_x=False,
         y = -1 * y
     if swap_x:
         x = -1 * x
-    x_sens = np.mean(x[sens_times])
-    y_sens = np.mean(y[sens_times])
+    x_sens_A = np.mean(x[sens_times[:2]])
+    y_sens_A = np.mean(y[sens_times[:2]])
+    x_sens_B = np.mean(x[sens_times[-2:]])
+    y_sens_B = np.mean(y[sens_times[-2:]])
     x_mem = np.mean(x[mem_times])
     y_mem = np.mean(y[mem_times])
     if verbose:
@@ -354,13 +360,25 @@ def plot_arrow_line(x, y, ax=None, c='blue', verbose=False, swap_x=False,
     # plt.scatter(x_mem, y_mem, marker='o', s=50, c=c_mat[-1, :][np.newaxis, :])
     if draw_sens_mem:
         if c == 'm':
-            ax.quiver([0, x_sens], [0, y_sens], [x_sens, 0], [y_sens, 0],  width=.02,
-                          scale_units='xy', angles='xy', scale=1, color=color_sense, zorder=2)
-            ax.quiver([0, x_mem], [0, y_mem], [x_mem, 0], [y_mem, 0],  width=.02, # edgecolors='k',
-                      scale_units='xy', angles='xy', scale=1, color=color_mem, zorder=2)
-            if draw_names_sens_mem:
+            total_sense_length = np.sqrt((x_sens_A + x_sens_B) ** 2 + (y_sens_A + y_sens_B) ** 2)
+            arr_sens_A = patches.Arrow(x=0, y=0, dx=(x_sens_A + x_sens_B) / total_sense_length,
+                                        dy=(y_sens_A + y_sens_B) / total_sense_length,
+                                        color=color_sense, width=0.2, zorder=2)
+            # arr_sens_B = patches.Arrow(x=0, y=0, dx=x_sens_B, dy=y_sens_B, color=color_sense, width=0.2, zorder=2)
+            arr_mem = patches.Arrow(x=0, y=0, dx=x_mem / np.sqrt(x_mem ** 2 + y_mem ** 2),
+                                    dy=y_mem / np.sqrt(x_mem ** 2 + y_mem ** 2), color=color_mem, width=0.2, zorder=2)
+            ax.add_patch(arr_sens_A)
+            # ax.add_patch(arr_sens_B)
+            ax.add_patch(arr_mem)
+            if draw_names_sens_mem == 'high':
                 plt.text(s='sensory experience', x=0.2, y=0.8, c=color_sense)
-                plt.text(s='memory', x=0.05, y=-0.15, c=color_mem)
+                plt.text(s='correlated\nmemory', x=0.05, y=-0.3, c=color_mem)
+            elif draw_names_sens_mem == 'med':
+                plt.text(s='sensory experience', x=0.2, y=0.5, c=color_sense)
+                plt.text(s='decorrelated\nmemory', x=0.35, y=-1, c=color_mem)
+            elif draw_names_sens_mem == 'low':
+                plt.text(s='sensory\nexperience', x=0.7, y=0.6, c=color_sense)
+                plt.text(s='anti-correlated\nmemory', x=-1.2, y=-1.1, c=color_mem)
     if draw_time:
         if draw_time == 'high':
             time_arrow = patches.FancyArrowPatch(posA=(0.2, 0.9), posB=(1.05, 0.1),
@@ -445,18 +463,19 @@ def plot_two_neuron_state_space(activity_1, activity_2, mean_ls_dict, swap_x=Fal
     return ax
 
 
-def plot_trial_activity(forw, ax, neuron_order=None, n_trial=0):
+def plot_trial_activity(forw, ax, neuron_order=None, n_trial=0, c_bar=True, print_labels=False):
     tmp_act = forw['test'][n_trial, :, :].T
     if neuron_order is None:
         neuron_order is np.arange(tmp_act.shape[0])
     tmp_act = np.squeeze(tmp_act[neuron_order, :])
-    sns.heatmap(tmp_act, vmin=-1, vmax=1, cmap='RdBu_r',
-                xticklabels=double_time_labels_blank[:-1], ax=ax)
+    sns.heatmap(tmp_act, vmin=-1, vmax=1, cmap='RdBu_r', cbar=c_bar,
+                xticklabels=double_time_labels_blank[:-1], ax=ax,
+                cbar_kws={'pad': 0.01, 'fraction': 0.01})
     bottom, top = ax.get_ylim()
-    ax.set_ylim(bottom + 0.5, top - 0.5)
-
-    ax.set_ylabel('neuron id'); ax.set_xlabel('time');
-    ax.set_title(f'Activity of {forw["labels_test"][n_trial]} trial')
+    ax.set_ylim(bottom + 1.5, top - 0.5)
+    if print_labels:
+        ax.set_ylabel('neuron id'); ax.set_xlabel('time');
+        ax.set_title(f'Activity of {forw["labels_test"][n_trial]} trial')
     return ax
 
 def plot_convergence_rnn(rnn, save_fig=False, verbose=False,
@@ -487,7 +506,7 @@ def plot_multiple_rnn_properties(rnn_name_dict, rnn_folder):
     n_panels = 5
     rnn = {}
     i_rnn = 0
-    mean_ls_dict = {0: '-', 1: '--'}
+    mean_ls_dict = {0: '-', 1: ':'}
     neuron_selection = {'low': [0, 19], 'med': [0, 5], 'high': [19, 2]}
     title_selection = {'low': ['neuron 0 (Switch)', 'neuron 19 (Switch)'],
                        'med': ['neuron 0 (Stable)', 'neuron 5 (Switch)'],
@@ -508,6 +527,7 @@ def plot_multiple_rnn_properties(rnn_name_dict, rnn_folder):
         ax_rast[key] = plt.subplot(n_panels, n_rnn, 1 + i_rnn)
         ol[key] = plot_raster_trial_average(forw=forw, ax=ax_rast[key], reverse_order=(key == 'low'), c_bar=False)
         ax_rast[key].set_title(rnn_title_dict[key], weight='bold')
+        ax_rast[key].set_xlabel('Time ' + r"$\to$")
 
         ## single examples
         ax_single[key] = {}  # plt.subplot(n_panels, n_rnn, 2 + (i_rnn * n_panels))
@@ -546,7 +566,7 @@ def plot_multiple_rnn_properties(rnn_name_dict, rnn_folder):
                                     swap_x=swap_x_dict[key], swap_y=swap_y_dict[key],
                                     draw_sens_mem=True, x_name=title_selection[key][0][-7:-1] + ' neuron',
                                     y_name=title_selection[key][1][-7:-1] + ' neuron',
-                                    draw_names_sens_mem=(i_rnn == 0))
+                                    draw_names_sens_mem=key)
         # ax_ss_arr[key].set_xlim([-0.9, 0.9])
         # ax_ss_arr[key].set_ylim([-0.9, 0.9])
 
@@ -578,4 +598,154 @@ def plot_multiple_rnn_properties(rnn_name_dict, rnn_folder):
             cax_ct.yaxis.set_ticks_position('right')
 
         i_rnn += 1
+    return None
+
+def plot_prediction_example(rnn, verbose=1):
+
+    ## Generate new test trials:
+    if verbose:
+        print(f'generating data with {rnn.info_dict["ratio_train"]} train ratio, {rnn.info_dict["ratio_exp"]} expected ratio')
+    tmp0, tmp1 = bp.generate_synt_data(n_total=100,
+                                   n_times=rnn.info_dict['n_times'],
+                                   n_freq=rnn.info_dict['n_freq'],
+                                   ratio_train=rnn.info_dict['ratio_train'],
+                                   ratio_exp=rnn.info_dict['ratio_exp'],
+                                   noise_scale=rnn.info_dict['noise_scale'],
+                                   double_length=rnn.info_dict['doublesse'])
+    x_train, y_train, x_test, y_test = tmp0
+    labels_train, labels_test = tmp1
+    _, __, forward_mat = bp.train_decoder(rnn_model=rnn, x_train=x_train, x_test=x_test,
+                                       labels_train=labels_train, labels_test=labels_test,
+                                       save_inplace=False, sparsity_c=0.1, label_name='alpha')  # train decoder just to get forward matrix really
+    forward_mat['labels_train'] = labels_train
+    forward_mat['labels_test'] = labels_test
+
+
+    fig = plt.figure(constrained_layout=True)
+    gs = fig.add_gridspec(ncols=3, nrows=2, width_ratios=[1, 2.2, 1.2])
+    ax_gt, ax_act, ax_pred = {}, {}, {}
+    ind_exp, true_exp, pred_exp = {}, {}, {}
+    for i_ind, ind in enumerate(['11', '12']):
+        ind_exp[ind] = np.where(labels_test == ind)[0][0]
+        pred_exp[ind] = bp.compute_full_pred(x_test[ind_exp[ind],:,:], model=rnn)  # computed forward predictions
+        true_exp[ind] = y_test[ind_exp[ind], :, :]
+        pred_exp[ind] = pred_exp[ind].squeeze()
+        true_exp[ind] = true_exp[ind].squeeze()
+        assert pred_exp[ind].ndim == true_exp[ind].ndim and pred_exp[ind].ndim == 2, 'pred_exp or true_exp doesnt have dim 2, probably because it is mutliple trials'
+        pred_exp[ind] = pred_exp[ind].detach().numpy()
+        true_exp[ind] = true_exp[ind].detach().numpy()
+
+        ax_gt[ind] = fig.add_subplot(gs[i_ind, 0])  # stimuli
+        plot_example_trial(true_exp[ind], ax=ax_gt[ind], c_map='Greys', print_labels=False, c_bar=False)
+
+        ax_act[ind] = fig.add_subplot(gs[i_ind, 1])  # activity
+        plot_trial_activity(forw=forward_mat, ax=ax_act[ind], n_trial=ind_exp[ind], c_bar=False)
+
+        ax_pred[ind] = fig.add_subplot(gs[i_ind, 2])  # predictions
+        plot_example_trial(pred_exp[ind], ax=ax_pred[ind], c_map='Greys', print_labels=False, c_bar=False)
+
+        ## C highlight:
+        for ax in [ax_pred[ind], ax_gt[ind]]:
+            ax.add_patch(patches.FancyBboxPatch((8.5, 4.85), width=2.9, height=2.45,
+                                           fill=False, edgecolor='blue', lw=3))
+
+        ## Colorbars
+        if i_ind == 0:
+            divider = make_axes_locatable(ax_pred[ind])
+            cax_top = divider.append_axes('right', size='5%', pad=0.1)
+            mpl_colorbar(ax_act[ind].get_children()[0], cax=cax_top)
+            cax_top.yaxis.set_ticks_position('right')
+            cax_top.set_yticks([-1, -0.5, 0, 0.5, 1])
+            for tick in cax_top.yaxis.get_major_ticks():
+                tick.label.set_fontsize('x-small')
+            cax_top.set_ylabel('Neural activity')
+        elif i_ind == 1:
+            divider = make_axes_locatable(ax_pred[ind])
+            cax_bottom = divider.append_axes('right', size='5%', pad=0.1)
+            mpl_colorbar(ax_pred[ind].get_children()[0], cax=cax_bottom)
+            cax_bottom.yaxis.set_ticks_position('right')
+            cax_bottom.set_yticks(np.linspace(0, 1, 6))
+            for tick in cax_bottom.yaxis.get_major_ticks():
+                tick.label.set_fontsize('x-small')
+            cax_bottom.set_ylabel('Probability')
+
+        ## Labels and such:
+        ax_act[ind].set_ylabel('neuron #')
+        if i_ind == 0:
+            ax_act[ind].set_title('Neural activity r' + r"$_t$", weight='bold')
+            ax_gt[ind].set_title('True stimuli z' + r"$_t$", weight='bold')
+            ax_gt[ind].set_ylabel(r"$\mathbf{\alpha = 1, \beta = 1}$" + '\n expected trial', weight='bold', size=12)
+            ax_pred[ind].set_title('Network predictions ' + r"$\mathbf{\hat{y}}_t$", weight='bold')
+            ax_act[ind].set_xlabel('')
+        else:
+            ax_act[ind].set_title('')
+            ax_gt[ind].set_ylabel(r"$\mathbf{\alpha = 1, \beta = 2}$" + '\n unexpected trial', weight='bold', size=12)
+            ax_gt[ind].set_xlabel('Time ' + r"$\to$", size=12)
+            ax_act[ind].set_xlabel('Time ' + r"$\to$", size=12)
+            ax_pred[ind].set_xlabel('Time ' + r"$\to$", size=12)
+    return (ax_gt, ax_act, ax_pred)
+
+def plot_distr_networks(rnn_folder='models/75-25_100models/', verbose=0,
+                        train_times = np.arange(8, 11),
+                        test_times = np.arange(6, 8)):
+
+    agg_score_use = bp.aggregate_score_mats(model_folder=rnn_folder)
+    if verbose:
+        print(f'shape agg: {agg_score_use.shape}')
+        print(f'train times: {train_times}, test times: {test_times}')
+    summ_accuracy = agg_score_use[:, train_times, :][:, :, test_times].mean((1, 2))  # average of patch
+    alpha_diag = np.diag(agg_score_use.mean(0)).copy()
+    beta_diag = np.zeros_like(alpha_diag) + 0.5
+    ## draw fig:
+    ax_mean = plt.subplot(1, 3, 1)   # mean ct
+    plot_decoder_crosstemp_perf(score_matrix=agg_score_use.mean(0), cmap_hm='BrBG', c_bar=False,
+                                   ax=ax_mean, ticklabels=double_time_labels_blank[:-1])
+    ax_mean.set_title('Mean across 100 networks', weight='bold')
+    ## Custom color bar:
+    divider = make_axes_locatable(ax_mean)
+    cax_mean = divider.append_axes('right', size='5%', pad=0.01)
+    mpl_colorbar(ax_mean.get_children()[0], cax=cax_mean)
+    cax_mean.yaxis.set_ticks_position('right')
+    for tick in cax_mean.yaxis.get_major_ticks():
+        tick.label.set_fontsize('x-small')
+
+    ax_var = plt.subplot(1, 3, 2)  # variance matrix
+    plot_decoder_crosstemp_perf(score_matrix=agg_score_use.var(0), cmap_hm='Greys', c_bar=False,
+                                   ax=ax_var, ticklabels=double_time_labels_blank[:-1])
+    ax_var.set_title('Variance across 100 networks', weight='bold')
+    ## custom color bars:
+    divider = make_axes_locatable(ax_var)
+    cax_var = divider.append_axes('right', size='5%', pad=0.01)
+    mpl_colorbar(ax_var.get_children()[0], cax=cax_var)
+    cax_var.yaxis.set_ticks_position('right')
+    for tick in cax_var.yaxis.get_major_ticks():
+        tick.label.set_fontsize('x-small')
+
+    ax_auto = plt.subplot(2, 3, 3)  # alpha and beta auto-decoding
+    _  = plot_alpha_beta_performance(alpha_perf=alpha_diag, beta_perf=beta_diag, ax=ax_auto)
+    ax_auto.set_title('Auto-decoding accuracy', weight='bold')
+    ax_hist = plt.subplot(2, 3, 6)  # histogram
+    ax_hist.set_xlabel('Average accuracy')
+    ax_hist.set_ylabel('Frequency');
+    ax_hist.set_title('Histogram of patch', weight='bold')
+    ax_hist.hist(summ_accuracy, color='k', bins=np.linspace(0, 1, 21),
+         rwidth=0.9, alpha=0.9)
+    ax_hist.spines['top'].set_visible(False)
+    ax_hist.spines['right'].set_visible(False)
+
+    ## Add patches
+    color_patch  = 'green'
+    lw_patch = 2
+    ax_var.add_patch(patches.FancyBboxPatch((test_times[0], train_times[0]),
+                                        width=len(test_times), height=len(train_times),
+                                       fill=False, edgecolor=color_patch, lw=lw_patch))  # patch in variance plot
+    ax_hist.add_patch(patches.FancyBboxPatch((0.01, -7),
+                                    width=0.8, height=22, clip_on=False,
+                                    fill=False, edgecolor=color_patch, lw=lw_patch )) # box around histogram
+    line_top = patches.Arc(xy=(test_times[0] + 2, train_times[0] + 1.58), width=29.8, height=3.77,
+                            theta1=270, theta2=360, clip_on=False, linewidth=lw_patch, color=color_patch) # top connecting line
+    ax_var.add_patch(line_top)
+    line_bottom = patches.Arc(xy=(test_times[0] + 2, train_times[0] + 12.55), width=29.8, height=18.5,
+                            theta1=270, theta2=360, clip_on=False, linewidth=lw_patch, color=color_patch)  # bottom connecting line
+    ax_var.add_patch(line_bottom)
     return None

@@ -375,7 +375,7 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/'):
     except KeyboardInterrupt:
         print('KeyboardInterrupt, exit')
 
-def train_single_decoder_new_data(rnn, ratio_expected=0.5,
+def train_single_decoder_new_data(rnn, ratio_expected=0.5, label='alpha',
                                   n_samples=None, ratio_train=0.8, verbose=False,
                                   sparsity_c=0.1):
     '''Generates new data, and then trains the decoder via train_decoder()'''
@@ -397,13 +397,13 @@ def train_single_decoder_new_data(rnn, ratio_expected=0.5,
     ## Train decoder:
     score_mat, decoder_dict, forward_mat = train_decoder(rnn_model=rnn, x_train=x_train, x_test=x_test,
                                            labels_train=labels_train, labels_test=labels_test,
-                                           save_inplace=True, sparsity_c=sparsity_c, label_name='alpha')
+                                           save_inplace=True, sparsity_c=sparsity_c, label_name=label)
     forward_mat['labels_train'] = labels_train
     forward_mat['labels_test'] = labels_test
     return score_mat, decoder_dict, forward_mat
 
 def train_multiple_decoders(rnn_folder='models/', ratio_expected=0.5,
-                            n_samples=None, ratio_train=0.8):
+                            n_samples=None, ratio_train=0.8, label='alpha'):
     '''train decoders for all RNNs in rnn_folder'''
     rnn_list = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
     for i_rnn, rnn_name in tqdm(enumerate(rnn_list)):
@@ -412,7 +412,7 @@ def train_multiple_decoders(rnn_folder='models/', ratio_expected=0.5,
             rnn = pickle.load(f)
         _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=ratio_expected,
                                           n_samples=n_samples, ratio_train=ratio_train,
-                                          verbose=(i_rnn == 0)) # results are saved in RNN class
+                                          verbose=(i_rnn == 0), label=label) # results are saved in RNN class
         rnn.save_model(folder=rnn_folder, verbose=0)  # save results to file
     return None
 
