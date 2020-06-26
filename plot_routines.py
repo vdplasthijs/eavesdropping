@@ -150,14 +150,14 @@ def plot_raster_trial_average(forw, ax=None, save_fig=False, reverse_order=False
     return ol
 
 def plot_dynamic_decoding_axes(rnn, ticklabels=double_time_labels_blank[:-1],
-                               neuron_order=None):
+                               neuron_order=None, label='alpha'):
     '''Plot the decoding axis w for each time point; and the diagonal auto-decoding
     accuracy on top. Returns these two axes. '''
     # if ax is None:
     #     ax = plt.subplot(111)
 
-    decoder_axes = np.zeros((rnn.decoder_dict[0].coef_.size, len(rnn.decoder_dict)))
-    for k, v in rnn.decoder_dict.items():
+    decoder_axes = np.zeros((rnn.decoder_dict[label][0].coef_.size, len(rnn.decoder_dict[label])))
+    for k, v in rnn.decoder_dict[label].items():
         decoder_axes[:, k] = v.coef_
     cutoff_w = np.percentile(np.abs(decoder_axes), 99)
     if neuron_order is not None:
@@ -165,13 +165,13 @@ def plot_dynamic_decoding_axes(rnn, ticklabels=double_time_labels_blank[:-1],
         decoder_axes = decoder_axes[neuron_order, :]
 
     ax_dec_diag = plt.subplot(3, 1, 1)
-    ax_dec_diag.plot(np.diag(rnn.decoding_crosstemp_score), linewidth=3,
+    ax_dec_diag.plot(np.diag(rnn.decoding_crosstemp_score[label]), linewidth=3,
                              linestyle='-', marker='.', markersize=10, color='k', alpha=0.6)
     ax_dec_diag.set_ylabel('Score')
     ax_dec_diag.set_title('Decoding performance (t = tau)')
-    ax_dec_diag.set_xticks(np.arange(len(np.diag(rnn.decoding_crosstemp_score))));
+    ax_dec_diag.set_xticks(np.arange(len(np.diag(rnn.decoding_crosstemp_score[label]))));
     ax_dec_diag.set_xticklabels(ticklabels);
-    ax_dec_diag.set_xlim([-0.5, len(np.diag(rnn.decoding_crosstemp_score)) - 0.5])
+    ax_dec_diag.set_xlim([-0.5, len(np.diag(rnn.decoding_crosstemp_score[label])) - 0.5])
 
     plt.subplot(3, 1, (2, 3))
     ax_dec_w = sns.heatmap(decoder_axes, xticklabels=ticklabels,
@@ -198,15 +198,15 @@ def plot_example_trial(trial, ax=None, yticklabels=freq_labels_sub,
         ax.set_ylabel('Stimulus vector')
     return ax
 
-def plot_time_trace_1_decoding_neuron(rnn, n_neuron=3, ax=None):
+def plot_time_trace_1_decoding_neuron(rnn, n_neuron=3, ax=None, label='alpha'):
     if ax is None:
         ax = plt.subplot(111)
-    n_tp = len(rnn.decoder_dict)
+    n_tp = len(rnn.decoder_dict[label])
     time_trace_pos = np.zeros(n_tp)
     time_trace_neg = np.zeros(n_tp)
     for i_tp in range(n_tp):
-        time_trace_pos[i_tp] = np.clip(rnn.decoder_dict[i_tp].coef_[0][n_neuron], a_min=0, a_max=np.inf)
-        time_trace_neg[i_tp] = -1 * np.clip(rnn.decoder_dict[i_tp].coef_[0][n_neuron], a_max=0, a_min=-1 * np.inf)
+        time_trace_pos[i_tp] = np.clip(rnn.decoder_dict[label][i_tp].coef_[0][n_neuron], a_min=0, a_max=np.inf)
+        time_trace_neg[i_tp] = -1 * np.clip(rnn.decoder_dict[label][i_tp].coef_[0][n_neuron], a_max=0, a_min=-1 * np.inf)
     ax.plot(time_trace_pos, linewidth=3, c='green')
     ax.plot(time_trace_neg, linewidth=3, c='m')
     ax.set_xlabel('time'); ax.set_ylabel('Decoding strenght')
@@ -572,7 +572,7 @@ def plot_multiple_rnn_properties(rnn_name_dict, rnn_folder):
 
         ## CT matrix
         ax_ctmat[key] = plt.subplot(n_panels, n_rnn, 13 + i_rnn)
-        _, hm = plot_decoder_crosstemp_perf(score_matrix=rnn[key].decoding_crosstemp_score,
+        _, hm = plot_decoder_crosstemp_perf(score_matrix=rnn[key].decoding_crosstemp_score['alpha'],
                                ax=ax_ctmat[key], c_bar=False,
                                ticklabels=double_time_labels_blank[:-1])
         ax_ctmat[key].set_title('')

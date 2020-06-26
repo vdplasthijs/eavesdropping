@@ -106,8 +106,8 @@ class RNN(nn.Module):
         self.train_loss_arr = []  # to be appended during training
         self.test_loss_arr = []
         self.test_loss_ratio_ce = []
-        self.decoding_crosstemp_score = None
-        self.decoder_dict = None
+        self.decoding_crosstemp_score = {}
+        self.decoder_dict = {}
 
         ## Automatic:
         self.__datetime_created = datetime.datetime.now()
@@ -333,8 +333,8 @@ def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
                 score_mat[tau, tt] = np.mean(prob_correct)
                 # score_mat[tau, tt] = np.exp(np.mean(np.log(prob_correct)))
     if save_inplace:
-        rnn_model.decoding_crosstemp_score = score_mat
-        rnn_model.decoder_dict = decoder_dict
+        rnn_model.decoding_crosstemp_score[label_name] = score_mat
+        rnn_model.decoder_dict[label_name] = decoder_dict
     return score_mat, decoder_dict, forw_mat
 
 def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/'):
@@ -363,9 +363,6 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/'):
                         verbose=0)
 
             ## Decode cross temporally
-            # score_mat, decoder_dict = train_decoder(rnn_model=rnn, x_train=x_train, x_test=x_test,
-            #                                         labels_train=labels_train, labels_test=labels_test,
-            #                                         save_inplace=True)
             score_mat, decoder_dict, _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
                                                             n_samples=None, ratio_train=0.8, verbose=False)
 
@@ -403,13 +400,16 @@ def train_single_decoder_new_data(rnn, ratio_expected=0.5, label='alpha',
     return score_mat, decoder_dict, forward_mat
 
 def train_multiple_decoders(rnn_folder='models/', ratio_expected=0.5,
-                            n_samples=None, ratio_train=0.8, label='alpha'):
+                            n_samples=None, ratio_train=0.8, label='alpha', reset_decoders=False):
     '''train decoders for all RNNs in rnn_folder'''
     rnn_list = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
     for i_rnn, rnn_name in tqdm(enumerate(rnn_list)):
         ## Load RNN:
         with open(rnn_folder + rnn_name, 'rb') as f:
             rnn = pickle.load(f)
+        if reset_decoders:
+            rnn.decoding_crosstemp_score = {}
+            rnn.decoder_dict = {}
         _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=ratio_expected,
                                           n_samples=n_samples, ratio_train=ratio_train,
                                           verbose=(i_rnn == 0), label=label) # results are saved in RNN class
@@ -449,7 +449,7 @@ def aggregate_convergence(model_folder='models/', check_info_dict=True):
             arr_loss[tt][i_tl, :len(tl)] = tl  # fill in convergence arrays. nans remain after termination
     return arr_loss
 
-def aggregate_score_mats(model_folder='models/', check_info_dict=True):
+def aggregate_score_mats(model_folder='models/', check_info_dict=True, label='alpha'):
     '''Aggregate all score matrices for all rnns saved in folder'''
     if check_info_dict:
         check_params = ['n_total', 'n_freq', 'n_times', 'ratio_train', 'ratio_exp',
@@ -461,7 +461,7 @@ def aggregate_score_mats(model_folder='models/', check_info_dict=True):
         with open(model_folder + mn, 'rb') as f:
             model = pickle.load(f)
         if ii == 0:  # use first to create agrr matrix
-            mat_shape = model.decoding_crosstemp_score.shape
+            mat_shape = model.decoding_crosstemp_score[label].shape
             assert len(mat_shape) == 2  # 2D matrix
             agg_score_mat = np.zeros((len(list_models), mat_shape[0], mat_shape[1]))
         else:  #TODO: fix check
@@ -470,14 +470,14 @@ def aggregate_score_mats(model_folder='models/', check_info_dict=True):
                     assert (model.info_dict[cp] == prev_model.info_dict[cp]), f'AssertionError: models {prev_name} and {mn} are different'
                 assert (model.info_dict['eval_times'] == prev_model.info_dict['eval_times']).all(), f'AssertionError: models {prev_name} and {mn} are different'
 
-        agg_score_mat[ii, :, :] = model.decoding_crosstemp_score  # add score matrix
+        agg_score_mat[ii, :, :] = model.decoding_crosstemp_score[label]  # add score matrix
         prev_model = model
         prev_name = mn
         f.close()
     return agg_score_mat
 
 
-def aggregate_decoders(model_folder='models/', check_info_dict=True):
+def aggregate_decoders(model_folder='models/', check_info_dict=True, label='alpha'):
     '''Aggregate all score matrices for all rnns saved in folder'''
     if check_info_dict:
         check_params = ['n_total', 'n_freq', 'n_times', 'ratio_train', 'ratio_exp',
@@ -489,8 +489,8 @@ def aggregate_decoders(model_folder='models/', check_info_dict=True):
         with open(model_folder + mn, 'rb') as f:
             model = pickle.load(f)
         if ii == 0:  # use first to create agrr matrix
-            n_decoders = len(model.decoder_dict)
-            n_nodes = len(model.decoder_dict[0].coef_[0])
+            n_decoders = len(model.decoder_dict[label])
+            n_nodes = len(model.decoder_dict[label][0].coef_[0])
             assert n_nodes == model.info_dict['n_nodes'], f'n nodes error: coef: {n_nodes}, info dict: {model.info_dict["n_nodes"]}'
             decoder_mat = np.zeros((len(list_models), n_nodes, n_decoders))
         else:  #TODO: fix check
@@ -498,14 +498,14 @@ def aggregate_decoders(model_folder='models/', check_info_dict=True):
                 for cp in check_params:
                     assert (model.info_dict[cp] == prev_model.info_dict[cp]), f'AssertionError: models {prev_name} and {mn} are different'
                 assert (model.info_dict['eval_times'] == prev_model.info_dict['eval_times']).all(), f'AssertionError: models {prev_name} and {mn} are different'
-        for i_dec, dec in model.decoder_dict.items():
+        for i_dec, dec in model.decoder_dict[label].items():
             decoder_mat[ii, :, i_dec] = dec.coef_[0] # add score matrix
         prev_model = model
         prev_name = mn
         f.close()
     return decoder_mat
 
-def aggregate_weights(model_folder='models/', weight='U', check_info_dict=True):
+def aggregate_weights(model_folder='models/', weight='U', check_info_dict=True, label='alpha'):
         '''Aggregate all score matrices for all rnns saved in folder'''
         if check_info_dict:
             check_params = ['n_total', 'n_freq', 'n_times', 'ratio_train', 'ratio_exp',
@@ -517,8 +517,8 @@ def aggregate_weights(model_folder='models/', weight='U', check_info_dict=True):
             with open(model_folder + mn, 'rb') as f:
                 model = pickle.load(f)
             if ii == 0:  # use first to create agrr matrix
-                # n_decoders = len(model.decoder_dict)
-                # n_nodes = len(model.decoder_dict[0].coef_[0])
+                # n_decoders = len(model.decoder_dict[label])
+                # n_nodes = len(model.decoder_dict[label][0].coef_[0])
                 # assert n_nodes == model.info_dict['n_nodes'], f'n nodes error: coef: {n_nodes}, info dict: {model.info_dict["n_nodes"]}'
                 weight_mat = np.zeros((len(list_models), 8))
             else:  #TODO: fix check
@@ -526,7 +526,7 @@ def aggregate_weights(model_folder='models/', weight='U', check_info_dict=True):
                     for cp in check_params:
                         assert (model.info_dict[cp] == prev_model.info_dict[cp]), f'AssertionError: models {prev_name} and {mn} are different'
                     assert (model.info_dict['eval_times'] == prev_model.info_dict['eval_times']).all(), f'AssertionError: models {prev_name} and {mn} are different'
-            for i_dec, dec in model.decoder_dict.items():
+            for i_dec, dec in model.decoder_dict[label].items():
                 input_mat = next(model.lin_input.parameters()).detach().numpy()
                 weight_mat[ii, :] = np.mean(np.abs(input_mat), 0)# add score matrix
             prev_model = model

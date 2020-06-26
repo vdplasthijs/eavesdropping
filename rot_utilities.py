@@ -41,28 +41,6 @@ def find_max_or_min(array, dimension=0):
     minmax = amin.copy()
     minmax[ind_amax] = amax[ind_amax]
     return minmax
-#
-# def find_stable_switch_neurons_decoder(rnn):
-#     decoder_axes = np.zeros((rnn.decoder_dict[0].coef_.size, len(rnn.decoder_dict)))
-#     for k, v in rnn.decoder_dict.items():
-#         decoder_axes[:, k] = v.coef_
-#     n_nodes, n_times = decoder_axes.shape
-#     period_1 = np.arange(4, 8)  # 00BB
-#     period_2 = np.arange(10, 13)  # CCB
-#
-#     minmax_1 = find_max_or_min(decoder_axes[:, period_1], dimension=1) # minmax over 1st period for each neuron
-#     minmax_2 = find_max_or_min(decoder_axes[:, period_2], dimension=1)  # minmax over 2nd period
-#     nz_inds = np.intersect1d(np.where(np.abs(minmax_1) > 0)[0],
-#                              np.where(np.abs(minmax_2) > 0)[0])  # use sparsity, only select non zero cells
-#     sign_match = np.sign(minmax_1[nz_inds]) == np.sign(minmax_2[nz_inds])
-#     n_stable_neurons = np.sum(sign_match == True)
-#     n_switch_neurons = np.sum(sign_match == False)
-#     stable_inds = np.where(sign_match == True)[0]
-#     switch_inds = np.where(sign_match == False)[0]
-#     assert n_stable_neurons + n_switch_neurons == len(sign_match)
-#
-#     return (n_stable_neurons, n_switch_neurons), (stable_inds, switch_inds)
-
 
 def find_stable_switch_neurons_activity(forw_mat, diff_th=1):
     tt = 'train'
