@@ -193,6 +193,7 @@ def plot_example_trial(trial, ax=None, yticklabels=freq_labels_sub,
     bottom, top = ax.get_ylim()
     ax.set_ylim(bottom + 0.5, top - 0.5)
     ax.set_yticklabels(labels=yticklabels, rotation=0)
+    ax.set_xticklabels(labels=xticklabels, rotation=0)
     if print_labels:
         ax.set_xlabel('Time')
         ax.set_ylabel('Stimulus vector')
@@ -262,7 +263,7 @@ def plot_alpha_beta_performance(alpha_perf, beta_perf, ax=None,
     '''Plot two lines - alpha_perf & beta_perf'''
     if ax is None:
         ax = plt.subplot(111)
-    ax.plot(alpha_perf, alpha=0.9, color='k',
+    ax.plot(alpha_perf, alpha=0.9, color='#018571',
                   marker='', linewidth=3, markersize=18, label=r"$\alpha$")
     ax.plot(beta_perf, alpha=0.9, color='k', linestyle=':',
                   marker='', linewidth=3, markersize=18, label=r'$\beta$')
@@ -271,7 +272,7 @@ def plot_alpha_beta_performance(alpha_perf, beta_perf, ax=None,
     ax.set_yticks([0.5, 0.75, 1])
     ax.set_xlabel('Time ' + r'$\to$'); ax.set_ylabel('Accuracy');
     # ax.legend(bbox_to_anchor=(1,0 , 0, 1), fontsize=20)
-    ax.legend(bbox_to_anchor=(0.75, 0.1, 0, 1))
+    ax.legend(bbox_to_anchor=(0.85, 0.1, 0, 1))
     # ax.set_title(r'$\alpha$ decoding performance', weight='bold', fontsize=15);
     # ax.axvspan(xmin=10, xmax=17, alpha=0.15)
     ax.spines['top'].set_visible(False)
@@ -297,7 +298,7 @@ def plot_stable_switch_bar_diagram(stable_list, switch_list, ax=None, bar_width=
     ax.set_xticklabels(['anti-correlated', 'decorrelated', 'correlated'], rotation=0) # ax_bar.set_xticklabels(inds_sel.keys())
     ax.legend(); ax.set_ylabel('Fraction of neurons');
     ax.set_title('Distribution of stable & switch neurons', weight='bold')
-    sns.despine()
+    # sns.despine()
     if save_fig:
         plt.savefig(fig_name, bbox_inches='tight')
     return ax
@@ -493,7 +494,7 @@ def plot_convergence_rnn(rnn, save_fig=False, verbose=False,
     ax_ratio_ce.set_xlabel('Epoch'); ax_ratio_ce.set_ylabel('ratio CE loss');
     ax_ratio_ce.text(s='Ratio Cross Entropy / Total loss', x=5, y=0.8,
                      fontdict={'weight': 'bold'});
-    sns.despine()
+    # sns.despine()
     if verbose:
         print(f'Final test performance: {np.round(rnn.test_loss_arr[-1], 3)}')
     if save_fig:
@@ -600,7 +601,7 @@ def plot_multiple_rnn_properties(rnn_name_dict, rnn_folder):
         i_rnn += 1
     return None
 
-def plot_prediction_example(rnn, verbose=1):
+def plot_prediction_example(rnn, verbose=1, plot_conv=True):
 
     ## Generate new test trials:
     if verbose:
@@ -621,8 +622,16 @@ def plot_prediction_example(rnn, verbose=1):
     forward_mat['labels_test'] = labels_test
 
 
-    fig = plt.figure(constrained_layout=True)
-    gs = fig.add_gridspec(ncols=3, nrows=2, width_ratios=[1, 2.2, 1.2])
+    fig = plt.figure(constrained_layout=False)
+    if plot_conv is True:
+        plot_conv = 1
+        gs = fig.add_gridspec(ncols=3, nrows=2, width_ratios=[1, 2.2, 1.2], left=0.32, right=1)
+        gs_bottom = fig.add_gridspec(ncols=1, nrows=3, left=0, right=0.22, hspace=0.4)
+    else:
+        plot_conv = 0
+        gs = fig.add_gridspec(ncols=3, nrows=2, width_ratios=[1, 2.2, 1.2])
+
+
     ax_gt, ax_act, ax_pred = {}, {}, {}
     ind_exp, true_exp, pred_exp = {}, {}, {}
     for i_ind, ind in enumerate(['11', '12']):
@@ -634,6 +643,13 @@ def plot_prediction_example(rnn, verbose=1):
         assert pred_exp[ind].ndim == true_exp[ind].ndim and pred_exp[ind].ndim == 2, 'pred_exp or true_exp doesnt have dim 2, probably because it is mutliple trials'
         pred_exp[ind] = pred_exp[ind].detach().numpy()
         true_exp[ind] = true_exp[ind].detach().numpy()
+
+        if i_ind == 0:  # sort neurons
+            eval_times = rnn.info_dict['eval_times']
+            non_eval_times = np.array(list(set(np.arange(eval_times[-1])).difference(set(eval_times))))
+            pred_exp[ind][non_eval_times, :] = 0  # set non-clamped time points to 0
+            ol = opt_leaf(forward_mat['test'][ind_exp[ind], :, :].T)  # optimal leaf sorting
+            forward_mat['test'] = forward_mat['test'][:, :, ol]
 
         ax_gt[ind] = fig.add_subplot(gs[i_ind, 0])  # stimuli
         plot_example_trial(true_exp[ind], ax=ax_gt[ind], c_map='Greys', print_labels=False, c_bar=False)
@@ -683,24 +699,46 @@ def plot_prediction_example(rnn, verbose=1):
             ax_gt[ind].set_xlabel('Time ' + r"$\to$", size=12)
             ax_act[ind].set_xlabel('Time ' + r"$\to$", size=12)
             ax_pred[ind].set_xlabel('Time ' + r"$\to$", size=12)
+
+    if plot_conv == 1:
+        ax_conv_top = fig.add_subplot(gs_bottom[0, 0])
+        ax_conv_top = plot_train_test_perf(rnn_model=rnn, ax=ax_conv_top, train=False)
+        ax_conv_top.set_ylabel('Total loss')
+
+        ax_conv_middle = fig.add_subplot(gs_bottom[1, 0])
+        ax_conv_middle = plot_train_test_perf(rnn_model=rnn, ax=ax_conv_middle, train=False)
+        ax_conv_middle.set_ylabel('Total loss')
+
+        ax_conv_bottom = fig.add_subplot(gs_bottom[2, 0])
+        ax_conv_bottom.plot(np.arange(rnn.info_dict['trained_epochs']),
+                 np.zeros_like(rnn.test_loss_ratio_ce) + 0.5, c='grey', linestyle=':')
+        ax_conv_bottom.plot(rnn.test_loss_ratio_ce, linewidth=3, c='k', linestyle='--')
+        ax_conv_bottom.set_xlabel('Epoch'); ax_conv_bottom.set_ylabel('ratio CE loss');
+        for ax in [ax_conv_top, ax_conv_middle, ax_conv_bottom]:
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+
     return (ax_gt, ax_act, ax_pred)
 
 def plot_distr_networks(rnn_folder='models/75-25_100models/', verbose=0,
                         train_times = np.arange(8, 11),
                         test_times = np.arange(6, 8)):
 
-    agg_score_use = bp.aggregate_score_mats(model_folder=rnn_folder)
+    agg_score_alpha = bp.aggregate_score_mats(model_folder=rnn_folder, label='alpha')
+    agg_score_beta = bp.aggregate_score_mats(model_folder=rnn_folder, label='beta')
     if verbose:
-        print(f'shape agg: {agg_score_use.shape}')
+        print(f'shape agg: {agg_score_alpha.shape}')
         print(f'train times: {train_times}, test times: {test_times}')
-    summ_accuracy = agg_score_use[:, train_times, :][:, :, test_times].mean((1, 2))  # average of patch
-    alpha_diag = np.diag(agg_score_use.mean(0)).copy()
-    beta_diag = np.zeros_like(alpha_diag) + 0.5
+    summ_accuracy = agg_score_alpha[:, train_times, :][:, :, test_times].mean((1, 2))  # average of patch
+    alpha_diag = np.diag(agg_score_alpha.mean(0))
+    beta_diag = np.diag(agg_score_beta.mean(0))
+    alpha_diag_err = np.diag(agg_score_alpha.std(0))
+    beta_diag_err = np.diag(agg_score_beta.std(0))
     ## draw fig:
     ax_mean = plt.subplot(1, 3, 1)   # mean ct
-    plot_decoder_crosstemp_perf(score_matrix=agg_score_use.mean(0), cmap_hm='BrBG', c_bar=False,
+    plot_decoder_crosstemp_perf(score_matrix=agg_score_alpha.mean(0), cmap_hm='BrBG', c_bar=False,
                                    ax=ax_mean, ticklabels=double_time_labels_blank[:-1])
-    ax_mean.set_title('Mean across 100 networks', weight='bold')
+    ax_mean.set_title('Average ' + r'$\mathbf{\alpha}$' + ' accuracy\n(100 networks)', weight='bold')
     ## Custom color bar:
     divider = make_axes_locatable(ax_mean)
     cax_mean = divider.append_axes('right', size='5%', pad=0.01)
@@ -710,9 +748,9 @@ def plot_distr_networks(rnn_folder='models/75-25_100models/', verbose=0,
         tick.label.set_fontsize('x-small')
 
     ax_var = plt.subplot(1, 3, 2)  # variance matrix
-    plot_decoder_crosstemp_perf(score_matrix=agg_score_use.var(0), cmap_hm='Greys', c_bar=False,
+    plot_decoder_crosstemp_perf(score_matrix=agg_score_alpha.var(0), cmap_hm='bone_r', c_bar=False,
                                    ax=ax_var, ticklabels=double_time_labels_blank[:-1])
-    ax_var.set_title('Variance across 100 networks', weight='bold')
+    ax_var.set_title('Variance ' + r'$\mathbf{\alpha}$' + ' accuracy', weight='bold')
     ## custom color bars:
     divider = make_axes_locatable(ax_var)
     cax_var = divider.append_axes('right', size='5%', pad=0.01)
@@ -723,29 +761,51 @@ def plot_distr_networks(rnn_folder='models/75-25_100models/', verbose=0,
 
     ax_auto = plt.subplot(2, 3, 3)  # alpha and beta auto-decoding
     _  = plot_alpha_beta_performance(alpha_perf=alpha_diag, beta_perf=beta_diag, ax=ax_auto)
-    ax_auto.set_title('Auto-decoding accuracy', weight='bold')
+    ax_auto.fill_between(x=np.arange(len(alpha_diag)), y1=alpha_diag - alpha_diag_err,
+                         y2=alpha_diag + alpha_diag_err, color='#018571', alpha=0.3)
+    ax_auto.fill_between(x=np.arange(len(beta_diag)), y1=beta_diag - beta_diag_err,
+                         y2=beta_diag + beta_diag_err, color='grey', alpha=0.3)
+    ax_auto.set_title('Auto-temporal accuracy', weight='bold')
+
+
     ax_hist = plt.subplot(2, 3, 6)  # histogram
     ax_hist.set_xlabel('Average accuracy')
     ax_hist.set_ylabel('Frequency');
     ax_hist.set_title('Histogram of patch', weight='bold')
-    ax_hist.hist(summ_accuracy, color='k', bins=np.linspace(0, 1, 21),
-         rwidth=0.9, alpha=0.9)
+    n, bins, hist_patches = ax_hist.hist(summ_accuracy, color='k', bins=np.linspace(0, 1, 21),
+                                         rwidth=0.9, alpha=0.9)
+    ## Colour hist bars: https://stackoverflow.com/questions/23061657/plot-histogram-with-colors-taken-from-colormap
+    cm = plt.cm.get_cmap('BrBG')
+    bin_centers = 0.5 * (bins[:-1] + bins[1:])
+    col = bin_centers - np.min(bin_centers)      # scale values to interval [0,1]
+    col /= np.max(col)
+    for c, p in zip(col, hist_patches):
+        plt.setp(p, 'facecolor', cm(c))
+
     ax_hist.spines['top'].set_visible(False)
     ax_hist.spines['right'].set_visible(False)
 
     ## Add patches
     color_patch  = 'green'
     lw_patch = 2
-    ax_var.add_patch(patches.FancyBboxPatch((test_times[0], train_times[0]),
+    ax_mean.add_patch(patches.FancyBboxPatch((test_times[0], train_times[0]),
+                                        width=len(test_times), height=len(train_times),
+                                       fill=False, edgecolor=color_patch, lw=lw_patch))  # patch in variance plot
+    ax_var.add_patch(patches.FancyBboxPatch((test_times[0], train_times[0]), zorder=1,
                                         width=len(test_times), height=len(train_times),
                                        fill=False, edgecolor=color_patch, lw=lw_patch))  # patch in variance plot
     ax_hist.add_patch(patches.FancyBboxPatch((0.01, -7),
-                                    width=0.8, height=22, clip_on=False,
-                                    fill=False, edgecolor=color_patch, lw=lw_patch )) # box around histogram
+                                    width=0.8, height=20.8, clip_on=False,
+                                    fill=False, edgecolor=color_patch, lw=lw_patch)) # box around histogram
     line_top = patches.Arc(xy=(test_times[0] + 2, train_times[0] + 1.58), width=29.8, height=3.77,
                             theta1=270, theta2=360, clip_on=False, linewidth=lw_patch, color=color_patch) # top connecting line
     ax_var.add_patch(line_top)
     line_bottom = patches.Arc(xy=(test_times[0] + 2, train_times[0] + 12.55), width=29.8, height=18.5,
                             theta1=270, theta2=360, clip_on=False, linewidth=lw_patch, color=color_patch)  # bottom connecting line
     ax_var.add_patch(line_bottom)
+
+    ax_mean.text(s='A', x=-2, y=-1, fontdict={'weight': 'bold', 'size': 'xx-large'})
+    ax_mean.text(s='B', x=25, y=-1, fontdict={'weight': 'bold', 'size': 'xx-large'})
+    ax_mean.text(s='C', x=50, y=-1, fontdict={'weight': 'bold', 'size': 'xx-large'})
+    ax_mean.text(s='D', x=50, y=11.1, fontdict={'weight': 'bold', 'size': 'xx-large'}, zorder=2)
     return None
