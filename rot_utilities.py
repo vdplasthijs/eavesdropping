@@ -8,6 +8,8 @@
 
 
 import numpy as np
+import pickle, os
+import pandas as pd
 
 def angle_vecs(v1, v2):
     """Compute angle between two vectors with cosine similarity.
@@ -101,3 +103,19 @@ def rmse_matrix_symm(matrix, subtract=0.5):
     rmse = np.sqrt(rmse)
     low_tri_sum /= n_el
     return (rmse, low_tri_sum)
+
+def load_rnn(rnn_name):
+    with open(rnn_name, 'rb') as f:
+        rnn = pickle.load(f)
+    return rnn
+
+def make_df_network_size(rnn_folder):
+    rnn_names = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
+    df_data = pd.DataFrame({x: np.zeros(len(rnn_names)) for x in ['n_nodes', 'min_test_perf']})
+    for i_rnn, rnn_name in enumerate(rnn_names):
+        rnn = load_rnn(rnn_name=os.path.join(rnn_folder, rnn_name))
+        df_data['n_nodes'].iat[i_rnn] = rnn.info_dict['n_nodes']
+        ind_min = np.argmin(rnn.test_loss_arr)
+        df_data['min_test_perf'].iat[i_rnn] = rnn.test_loss_arr[ind_min] * rnn.test_loss_ratio_ce[ind_min]
+    df_data = df_data.sort_values('n_nodes')
+    return df_data

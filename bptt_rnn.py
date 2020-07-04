@@ -106,6 +106,8 @@ class RNN(nn.Module):
         self.train_loss_arr = []  # to be appended during training
         self.test_loss_arr = []
         self.test_loss_ratio_ce = []
+        self.test_loss_split = {'B': [], 'C': [], 'D': [], '0': [], 'L1': [],
+                                '0_postA': [], '0_postB': [], '0_postC': [], '0_postD': []}
         self.decoding_crosstemp_score = {}
         self.decoder_dict = {}
 
@@ -148,15 +150,19 @@ class RNN(nn.Module):
         for key, val in param_dict.items():
             self.info_dict[key] = val  # overwrites
 
-    def save_model(self, folder=None, verbose=True):
+    def save_model(self, folder=None, verbose=True, add_nnodes=False):
         '''Export this RNN model to folder. If self.file_name is None, it is saved  under
         a timestamp.'''
         dt = datetime.datetime.now()
         timestamp = str(dt.date()) + '-' + str(dt.hour).zfill(2) + str(dt.minute).zfill(2)
         self.info_dict['timestamp'] = timestamp
         if self.file_name is None:
-            self.rnn_name = f'rnn_{timestamp}'
-            self.file_name = f'rnn_{timestamp}.data'
+            if add_nnodes is False:
+                self.rnn_name = f'rnn_{timestamp}'
+                self.file_name = f'rnn_{timestamp}.data'
+            else:
+                self.rnn_name = f'rnn_n{self.info_dict["n_nodes"]}_{timestamp}'
+                self.file_name = f'rnn_n{self.info_dict["n_nodes"]}_{timestamp}.data'
         if folder is None:
             folder = 'models/'
         elif folder[-1] != '/':
@@ -180,6 +186,37 @@ def tau_loss(y_est, y_true, tau_array=np.array([2, 3]),
         for _, p_set in enumerate(params):
             reg_loss += reg_param * p_set.norm(p=1)
     total_loss = ce + reg_loss
+    if return_ratio_ce is False:
+        return total_loss
+    elif return_ratio_ce:
+        return (total_loss, (ce / total_loss))
+
+def split_loss(y_est, y_true, tau_array=np.array([2, 3]),
+               time_prediction_array_dict={'B': [5, 6], 'C': [9, 10], 'D': [13, 14],
+                                           '0': [4, 7, 8, 11, 12, 15, 16], '0_postA': [4],
+                                           '0_postB': [7, 8], '0_postC': [11, 12], '0_postD': [15, 16]},
+               model=None, reg_param=0.001, return_ratio_ce=False):
+    '''Compute Cross Entropy for each given time array, and L1 regularisation.'''
+    assert model is not None
+    for key, tau_array in time_prediction_array_dict.items():
+        y_est_trunc = y_est[:, tau_array, :]  # only evaluated these time points
+        y_true_trunc = y_true[:, tau_array, :]
+        n_samples = y_true.shape[0]
+        ce = torch.sum(-1 * y_true_trunc * torch.log(y_est_trunc)) / n_samples  # take the mean CE over samples
+        model.test_loss_split[key].append(float(ce.detach().numpy()))  # add to model
+
+    y_est_trunc = y_est[:, tau_array, :]  # loss for backpropagation
+    y_true_trunc = y_true[:, tau_array, :]
+    n_samples = y_true.shape[0]
+    total_ce = torch.sum(-1 * y_true_trunc * torch.log(y_est_trunc)) / n_samples  # take the mean CE over samples
+
+    reg_loss = 0
+    params = [pp for pp in model.parameters()]  # for all weight (matrices) in the model
+    for _, p_set in enumerate(params):
+        reg_loss += reg_param * p_set.norm(p=1)
+    model.test_loss_split['L1'].append(float(reg_loss.detach().numpy()))
+
+    total_loss = total_ce + reg_loss
     if return_ratio_ce is False:
         return total_loss
     elif return_ratio_ce:
@@ -246,10 +283,10 @@ def bptt_training(rnn, optimiser, dict_training_params,
                     rnn.train_loss_arr.append(float(train_loss.detach().numpy()))
 
                     full_test_pred = compute_full_pred(model=rnn, xdata=x_test)
-                    test_loss, ratio = tau_loss(y_est=full_test_pred, y_true=y_test, model=rnn,
-                                               reg_param=dict_training_params['l1_param'],
-                                               tau_array=dict_training_params['eval_times'],
-                                               return_ratio_ce=True)
+                    test_loss, ratio = split_loss(y_est=full_test_pred, y_true=y_test, model=rnn,
+                                                  reg_param=dict_training_params['l1_param'],
+                                                  tau_array=dict_training_params['eval_times'],
+                                                  return_ratio_ce=True)
                     rnn.test_loss_arr.append(float(test_loss.detach().numpy()))
                     rnn.test_loss_ratio_ce.append(float(ratio.detach().numpy()))
 
