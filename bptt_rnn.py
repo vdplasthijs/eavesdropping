@@ -15,6 +15,7 @@ from torch.utils.data import TensorDataset, DataLoader
 import pickle, datetime, time, os, sys, git
 from tqdm import tqdm, trange
 import sklearn.svm, sklearn.model_selection
+import rot_utilities as ru
 
 def generate_synt_data(n_total=100, n_times=9, n_freq=8,
                        ratio_train=0.8, ratio_exp=0.5,
@@ -173,62 +174,118 @@ class RNN(nn.Module):
         if verbose > 0:
             print(f'RNN model saved as {self.file_name}')
 
-def tau_loss(y_est, y_true, tau_array=np.array([2, 3]),
-             model=None, reg_param=0.001, return_ratio_ce=False):
+class RNN_MNM(RNN):
+    def __init__(self, n_stim, n_nodes, init_std_scale=0.1):
+        super().__init__(n_stim=n_stim, n_nodes=n_nodes, init_std_scale=init_std_scale)  # init like normal RNN
+        self.lin_output = nn.Linear(self.n_nodes, self.n_stim + 2)  # override output
+        self.rnn_name = 'RNN-MNM (not saved)'
+        self.test_loss_split['MNM'] = []
+
+    def forward(self, inp, rnn_state=None):
+        '''Perform one forward step given input and hidden state. If hidden state
+        (rnn_state) is None, self.state will be used (regular behaviour).'''
+        if rnn_state is None:
+            rnn_state = self.state
+        lin_comb = self.lin_input(inp) + self.lin_feedback(rnn_state)  # input + previous state
+        new_state = torch.tanh(lin_comb)  # transfer function
+        self.state = new_state
+
+        ## MNM specific output:
+        linear_output = self.lin_output(new_state.squeeze())
+        output = torch.zeros_like(linear_output)  # we will normalise the prediction task & MNM separately:
+        output[:self.n_stim] = F.softmax(linear_output[:self.n_stim], dim=0)  # output nonlin-lin of the prediction task (normalised on these only )
+        output[self.n_stim:] = F.softmax(linear_output[self.n_stim:], dim=0)  # probabilities units for M and NM (normalised)
+        return new_state, output
+
+    def save_model(self, folder=None, verbose=True, add_nnodes=False):  # redefine because we want to change saving name
+        '''Export this RNN model to folder. If self.file_name is None, it is saved  under
+        a timestamp.'''
+        dt = datetime.datetime.now()
+        timestamp = str(dt.date()) + '-' + str(dt.hour).zfill(2) + str(dt.minute).zfill(2)
+        self.info_dict['timestamp'] = timestamp
+        if self.file_name is None:
+            if add_nnodes is False:
+                self.rnn_name = f'rnn-mnm_{timestamp}'
+                self.file_name = f'rnn-mnm_{timestamp}.data'
+            else:
+                self.rnn_name = f'rnn-mnm_n{self.info_dict["n_nodes"]}_{timestamp}'
+                self.file_name = f'rnn-mnm_n{self.info_dict["n_nodes"]}_{timestamp}.data'
+        if folder is None:
+            folder = 'models/'
+        elif folder[-1] != '/':
+            folder += '/'
+        self.full_path = folder + self.file_name
+        file_handle = open(self.full_path, 'wb')
+        pickle.dump(self, file_handle)
+        if verbose > 0:
+            print(f'RNN-MNM model saved as {self.file_name}')
+
+def tau_loss(y_est, y_true, tau_array=np.array([2, 3]), label=None, match_times=[13, 14],
+             model=None, reg_param=0.001):
     '''Compute Cross Entropy of given time array tau_array, and add L1 regularisation.'''
-    y_est_trunc = y_est[:, tau_array, :]  # only evaluated these time points
+    y_est_trunc = y_est[:, tau_array, :model.n_stim]  # only evaluated these time points, cut off at N_stim, because for M and NM these follow after
     y_true_trunc = y_true[:, tau_array, :]
     n_samples = y_true.shape[0]
     ce = torch.sum(-1 * y_true_trunc * torch.log(y_est_trunc)) / n_samples  # take the mean CE over samples
+
     reg_loss = 0
     if model is not None:  # add L1 regularisation
         params = [pp for pp in model.parameters()]  # for all weight (matrices) in the model
         for _, p_set in enumerate(params):
             reg_loss += reg_param * p_set.norm(p=1)
-    total_loss = ce + reg_loss
-    if return_ratio_ce is False:
-        return total_loss
-    elif return_ratio_ce:
-        return (total_loss, (ce / total_loss))
 
-def split_loss(y_est, y_true, tau_array=np.array([2, 3]),
+    if model.lin_output.out_features > model.n_stim: # M & NM present
+        assert match_times is not None, 'no match times defined '
+        assert label is not None, 'no labels defined'
+        match_arr = ru.labels_to_mnm(labels=label)
+        match_est = y_est[:, match_times, model.n_stim:]
+        match_arr_full = torch.zeros_like(match_est)
+        for tt in range(len(match_times)):
+            match_arr_full[:, tt, :] = torch.tensor(match_arr)
+        ce_match = torch.sum(-1 * match_arr_full * torch.log(match_est)) / n_samples  # take the mean CE over samples
+    else:
+        ce_match = 0
+
+    total_loss = ce + reg_loss + ce_match
+    return total_loss, (ce, reg_loss, ce_match)
+
+def split_loss(y_est, y_true, tau_array=np.array([2, 3]), label=None, match_times=[13, 14],
                time_prediction_array_dict={'B': [5, 6], 'C': [9, 10], 'D': [13, 14],
                                            '0': [4, 7, 8, 11, 12, 15, 16], '0_postA': [4],
                                            '0_postB': [7, 8], '0_postC': [11, 12], '0_postD': [15, 16]},
                model=None, reg_param=0.001, return_ratio_ce=False):
     '''Compute Cross Entropy for each given time array, and L1 regularisation.'''
     assert model is not None
-    for key, tau_array in time_prediction_array_dict.items():
-        y_est_trunc = y_est[:, tau_array, :]  # only evaluated these time points
+    for key, tau_array in time_prediction_array_dict.items():  # compute separate times separately
+        y_est_trunc = y_est[:, tau_array, :model.n_stim]  # only evaluated these time points
         y_true_trunc = y_true[:, tau_array, :]
         n_samples = y_true.shape[0]
         ce = torch.sum(-1 * y_true_trunc * torch.log(y_est_trunc)) / n_samples  # take the mean CE over samples
         model.test_loss_split[key].append(float(ce.detach().numpy()))  # add to model
 
-    y_est_trunc = y_est[:, tau_array, :]  # loss for backpropagation
-    y_true_trunc = y_true[:, tau_array, :]
-    n_samples = y_true.shape[0]
-    total_ce = torch.sum(-1 * y_true_trunc * torch.log(y_est_trunc)) / n_samples  # take the mean CE over samples
+    total_loss, (ce, reg_loss, ce_match) = tau_loss(y_est=y_est, y_true=y_true, model=model, label=label,
+                                                    reg_param=reg_param, match_times=match_times,
+                                                    tau_array=tau_array)  # compute three loss terms
 
-    reg_loss = 0
-    params = [pp for pp in model.parameters()]  # for all weight (matrices) in the model
-    for _, p_set in enumerate(params):
-        reg_loss += reg_param * p_set.norm(p=1)
-    model.test_loss_split['L1'].append(float(reg_loss.detach().numpy()))
+    model.test_loss_split['L1'].append(float(reg_loss.detach().numpy()))  # add to array
+    model.test_loss_split['MNM'].append(float(ce_match.detach().numpy()))
 
-    total_loss = total_ce + reg_loss
     if return_ratio_ce is False:
         return total_loss
     elif return_ratio_ce:
         return (total_loss, (ce / total_loss))
 
-def compute_full_pred(xdata, model):
+def compute_full_pred(xdata, model, mnm=False):
     '''Compute forward prediction of RNN. I.e. given an input series xdata, the
     model (RNN) computes the predicted output series.'''
     if xdata.ndim == 2:
         xdata = xdata[None, :, :]
-
-    full_pred = torch.zeros_like(xdata)  # because input & ouput have the same shape
+    mnm = model.lin_output.out_features > model.n_stim  # determine if MNM model
+    if mnm is False:
+        full_pred = torch.zeros_like(xdata)  # because input & ouput have the same shape
+    elif mnm:
+        assert xdata.shape[2] == 8  # stim vector
+        full_pred = torch.zeros((xdata.shape[0], xdata.shape[1], xdata.shape[2] + 2))  # make space for M and NM elements
     for kk in range(xdata.shape[0]): # loop over trials
         model.init_state()  # initiate rnn state per trial
         for tt in range(xdata.shape[1]):  # loop through time
@@ -236,11 +293,12 @@ def compute_full_pred(xdata, model):
     return full_pred
 
 def bptt_training(rnn, optimiser, dict_training_params,
-                  x_train, x_test, y_train, y_test, verbose=1):
+                  x_train, x_test, y_train, y_test, labels_train=None, labels_test=None, verbose=1):
     '''Training algorithm for backpropagation through time, given a RNN model, optimiser,
     dictionary with training parameters and train and test data. RNN is NOT reset,
     so continuation training is possible. Training can be aborted prematurely by Ctrl+C,
     and it will terminate correctly.'''
+    assert dict_training_params['bs'] == 1, 'batch size is not 1; this error is thrown because for MNM we assume it is 1 to let labels correspond to dataloadre loop'
     ## Create data loader objects:
     train_ds = TensorDataset(x_train, y_train)
     train_dl = DataLoader(train_ds, batch_size=dict_training_params['bs'])
@@ -248,12 +306,18 @@ def bptt_training(rnn, optimiser, dict_training_params,
     test_ds = TensorDataset(x_test, y_test)
     test_dl = DataLoader(test_ds, batch_size=dict_training_params['bs'])
 
+    if labels_train is not None and labels_test is not None:
+        assert labels_train.ndim == 1 and labels_test.ndim == 1
+        assert len(labels_train) == x_train.shape[0] and len(labels_test) == x_test.shape[0]
+    else:  # make arrays with None for compatiblity with loop
+        labels_train = [None] * x_train.shape[0]
+        labels_test = [None] * x_test.shape[0]
+
     prev_loss = 10  # init loss for convergence
     if 'trained_epochs' not in rnn.info_dict.keys():
         rnn.info_dict['trained_epochs'] = 0
 
     ## Training procedure
-    #if verbose > 0:
     init_str = f'Initialising training; start at epoch {rnn.info_dict["trained_epochs"]}'
     try:
         with trange(dict_training_params['n_epochs']) as tr:  # repeating epochs
@@ -264,29 +328,32 @@ def bptt_training(rnn, optimiser, dict_training_params,
                     update_str = f'Epoch {epoch}/{dict_training_params["n_epochs"]}. Train loss: {np.round(prev_loss, 6)}'
                     tr.set_description(update_str)
                 rnn.train()  # set to train model (i.e. allow gradient computation/tracking)
+                it_train = 0
                 for xb, yb in train_dl:  # returns torch(n_bs x n_times x n_freq)
+                    curr_label = labels_train[it_train]  # this works if batch size == 1
                     full_pred = compute_full_pred(model=rnn, xdata=xb)  # predict time trace
-                    loss = tau_loss(y_est=full_pred, y_true=yb, model=rnn,
-                                       reg_param=dict_training_params['l1_param'],
-                                       tau_array=dict_training_params['eval_times'])  # compute loss
+                    loss, _ = tau_loss(y_est=full_pred, y_true=yb, model=rnn,
+                                    reg_param=dict_training_params['l1_param'], match_times=[13, 14],
+                                    tau_array=dict_training_params['eval_times'], label=curr_label)  # compute loss
                     loss.backward()  # compute gradients
                     optimiser.step()  # update
                     optimiser.zero_grad()   # reset
+                    it_train += 1
 
                 rnn.eval()  # evaluation mode -> disable gradient tracking
                 with torch.no_grad():  # to be sure
                     ## Compute losses for saving:
                     full_pred = compute_full_pred(model=rnn, xdata=x_train)
-                    train_loss = tau_loss(y_est=full_pred, y_true=y_train, model=rnn,
-                                       reg_param=dict_training_params['l1_param'],
-                                       tau_array=dict_training_params['eval_times'])
+                    train_loss, _ = tau_loss(y_est=full_pred, y_true=y_train, model=rnn,
+                                          reg_param=dict_training_params['l1_param'], match_times=[13, 14],
+                                          tau_array=dict_training_params['eval_times'], label=labels_train)
                     rnn.train_loss_arr.append(float(train_loss.detach().numpy()))
 
                     full_test_pred = compute_full_pred(model=rnn, xdata=x_test)
                     test_loss, ratio = split_loss(y_est=full_test_pred, y_true=y_test, model=rnn,
                                                   reg_param=dict_training_params['l1_param'],
                                                   tau_array=dict_training_params['eval_times'],
-                                                  return_ratio_ce=True)
+                                                  return_ratio_ce=True, match_times=[13, 14], label=labels_test)
                     rnn.test_loss_arr.append(float(test_loss.detach().numpy()))
                     rnn.test_loss_ratio_ce.append(float(ratio.detach().numpy()))
 

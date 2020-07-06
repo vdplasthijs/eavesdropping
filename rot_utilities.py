@@ -119,3 +119,15 @@ def make_df_network_size(rnn_folder):
         df_data['min_test_perf'].iat[i_rnn] = rnn.test_loss_arr[ind_min] * rnn.test_loss_ratio_ce[ind_min]
     df_data = df_data.sort_values('n_nodes')
     return df_data
+
+def labels_to_mnm(labels):
+    if type(labels) == str:  # just one label
+        match = (labels[0] == labels[1])
+        return np.array([int(match), int(not match)])
+    else:
+        n_labels = len(labels)
+        match_array = np.zeros((n_labels, 2))
+        for i_label, label in enumerate(labels):
+            match_array[i_label, 0] = (label[0] == label[1])
+        match_array[:, 1] = np.logical_not(match_array[:, 0])
+        return match_array
