@@ -234,7 +234,7 @@ class RNN_MNM(RNN):
             print(f'RNN-MNM model saved as {self.file_name}')
 
 def tau_loss(y_est, y_true, tau_array=np.array([2, 3]), label=None, match_times=[13, 14],
-             model=None, reg_param=0.001):
+             model=None, reg_param=0.001, mnm_loss_separate=False):
     '''Compute Cross Entropy of given time array tau_array, and add L1 regularisation.'''
     y_est_trunc = y_est[:, tau_array, :model.n_stim]  # only evaluated these time points, cut off at N_stim, because for M and NM these follow after
     y_true_trunc = y_true[:, tau_array, :]
@@ -250,12 +250,22 @@ def tau_loss(y_est, y_true, tau_array=np.array([2, 3]), label=None, match_times=
     if model.lin_output.out_features > model.n_stim: # M & NM present
         assert match_times is not None, 'no match times defined '
         assert label is not None, 'no labels defined'
-        match_arr = ru.labels_to_mnm(labels=label)
-        match_est = y_est[:, match_times, model.n_stim:]
-        match_arr_full = torch.zeros_like(match_est)
+        match_arr = ru.labels_to_mnm(labels=label)  # get M & NM binary rep
+        match_est = y_est[:, match_times, model.n_stim:] # estimates for M, NM
+        match_arr_full = torch.zeros_like(match_est)  # has to be rescaled because of time axis
         for tt in range(len(match_times)):
-            match_arr_full[:, tt, :] = torch.tensor(match_arr)
-        ce_match = torch.sum(-1 * match_arr_full * torch.log(match_est)) / n_samples  # take the mean CE over samples
+            match_arr_full[:, tt, :] = torch.tensor(match_arr)  # concatenated along time axis
+        if mnm_loss_separate is False: # if P(M) + P(NM) == 1
+            ce_match = torch.sum(-1 * match_arr_full * torch.log(match_est)) / n_samples  # take the mean CE over samples
+        elif mnm_loss_separate:  # if P(M) <= 1 & P(NM) <=1
+            assert match_est.shape[2] == 2  # (M, NM)
+            match_only_est = match_est
+            match_only_est[:, :, 1] = 1 - match_only_est[:, :, 0]
+            nonmatch_only_est = match_est
+            nonmatch_only_est[:, :, 0] = 1 - nonmatch_only_est[:, :, 1]
+            ce_match_only = torch.sum(-1 * match_arr_full * torch.log(match_only_est)) / n_samples
+            ce_nonmatch_only = torch.sum(-1 * match_arr_full * torch.log(nonmatch_only_est)) / n_samples
+            ce_match = 0.5 * (ce_match_only + ce_nonmatch_only) # mean
     else:
         ce_match = 0
 
@@ -346,7 +356,7 @@ def bptt_training(rnn, optimiser, dict_training_params,
                     curr_label = labels_train[it_train]  # this works if batch size == 1
                     full_pred = compute_full_pred(model=rnn, xdata=xb)  # predict time trace
                     loss, _ = tau_loss(y_est=full_pred, y_true=yb, model=rnn,
-                                    reg_param=dict_training_params['l1_param'], match_times=[13, 14],
+                                    reg_param=dict_training_params['l1_param'], match_times=dict_training_params['eval_times'],  #[13, 14],
                                     tau_array=dict_training_params['eval_times'], label=curr_label)  # compute loss
                     loss.backward()  # compute gradients
                     optimiser.step()  # update
@@ -358,7 +368,7 @@ def bptt_training(rnn, optimiser, dict_training_params,
                     ## Compute losses for saving:
                     full_pred = compute_full_pred(model=rnn, xdata=x_train)
                     train_loss, _ = tau_loss(y_est=full_pred, y_true=y_train, model=rnn,
-                                          reg_param=dict_training_params['l1_param'], match_times=[13, 14],
+                                          reg_param=dict_training_params['l1_param'], match_times=dict_training_params['eval_times'],  #[13, 14],
                                           tau_array=dict_training_params['eval_times'], label=labels_train)
                     rnn.train_loss_arr.append(float(train_loss.detach().numpy()))
 
@@ -366,7 +376,8 @@ def bptt_training(rnn, optimiser, dict_training_params,
                     test_loss, ratio = split_loss(y_est=full_test_pred, y_true=y_test, model=rnn,
                                                   reg_param=dict_training_params['l1_param'],
                                                   tau_array=dict_training_params['eval_times'],
-                                                  return_ratio_ce=True, match_times=[13, 14], label=labels_test)
+                                                  return_ratio_ce=True, match_times=dict_training_params['eval_times'], # [13, 14],
+                                                  label=labels_test)
                     rnn.test_loss_arr.append(float(test_loss.detach().numpy()))
                     rnn.test_loss_ratio_ce.append(float(ratio.detach().numpy()))
 
