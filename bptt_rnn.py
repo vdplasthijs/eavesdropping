@@ -202,7 +202,7 @@ class RNN_MNM(RNN):
         output = torch.zeros_like(linear_output)  # we will normalise the prediction task & MNM separately:
         output[:self.n_stim] = F.softmax(linear_output[:self.n_stim], dim=0)  # output nonlin-lin of the prediction task (normalised on these only )
         if self.accumulate is False:
-            output[self.n_stim:] = F.softmax(linear_output[self.n_stim:], dim=0)  # probabilities units for M and NM (normalised)
+            output[self.n_stim:] = F.softmax(F.relu(linear_output[self.n_stim:]), dim=0)  # probabilities units for M and NM (normalised)
         elif self.accumulate:
             new_hist = F.relu(linear_output[self.n_stim:]) + self.history_mnm
             output[self.n_stim:] = F.softmax(new_hist, dim=0) # accumulate signal
@@ -356,7 +356,7 @@ def bptt_training(rnn, optimiser, dict_training_params,
                     curr_label = labels_train[it_train]  # this works if batch size == 1
                     full_pred = compute_full_pred(model=rnn, xdata=xb)  # predict time trace
                     loss, _ = tau_loss(y_est=full_pred, y_true=yb, model=rnn,
-                                    reg_param=dict_training_params['l1_param'], match_times=dict_training_params['eval_times'],  #[13, 14],
+                                    reg_param=dict_training_params['l1_param'], match_times=[13, 14], # dict_training_params['eval_times'],  #
                                     tau_array=dict_training_params['eval_times'], label=curr_label)  # compute loss
                     loss.backward()  # compute gradients
                     optimiser.step()  # update
@@ -368,7 +368,7 @@ def bptt_training(rnn, optimiser, dict_training_params,
                     ## Compute losses for saving:
                     full_pred = compute_full_pred(model=rnn, xdata=x_train)
                     train_loss, _ = tau_loss(y_est=full_pred, y_true=y_train, model=rnn,
-                                          reg_param=dict_training_params['l1_param'], match_times=dict_training_params['eval_times'],  #[13, 14],
+                                          reg_param=dict_training_params['l1_param'], match_times=[13, 14], #dict_training_params['eval_times'],  #
                                           tau_array=dict_training_params['eval_times'], label=labels_train)
                     rnn.train_loss_arr.append(float(train_loss.detach().numpy()))
 
@@ -376,7 +376,7 @@ def bptt_training(rnn, optimiser, dict_training_params,
                     test_loss, ratio = split_loss(y_est=full_test_pred, y_true=y_test, model=rnn,
                                                   reg_param=dict_training_params['l1_param'],
                                                   tau_array=dict_training_params['eval_times'],
-                                                  return_ratio_ce=True, match_times=dict_training_params['eval_times'], # [13, 14],
+                                                  return_ratio_ce=True, match_times=[13, 14],  # dict_training_params['eval_times'], #
                                                   label=labels_test)
                     rnn.test_loss_arr.append(float(test_loss.detach().numpy()))
                     rnn.test_loss_ratio_ce.append(float(ratio.detach().numpy()))
@@ -482,7 +482,7 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/'):
 
             ## Initiate RNN model
             # rnn = RNN(n_stim=d_dict['n_freq'], n_nodes=t_dict['n_nodes'])  # Create RNN class
-            rnn = RNN_MNM(n_stim=d_dict['n_freq'], n_nodes=t_dict['n_nodes'], accumulate=True)  # Create RNN class
+            rnn = RNN_MNM(n_stim=d_dict['n_freq'], n_nodes=t_dict['n_nodes'], accumulate=False)  # Create RNN class
             opt = torch.optim.SGD(rnn.parameters(), lr=t_dict['learning_rate'])  # call optimiser from pytorhc
             rnn.set_info(param_dict={**d_dict, **t_dict})
 
