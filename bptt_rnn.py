@@ -107,7 +107,7 @@ class RNN(nn.Module):
         self.train_loss_arr = []  # to be appended during training
         self.test_loss_arr = []
         self.test_loss_ratio_ce = []
-        self.test_loss_split = {'B': [], 'C': [], 'D': [], '0': [], 'L1': [],
+        self.test_loss_split = {'B': [], 'C': [], 'C1': [], 'C2': [], 'D': [], '0': [], 'L1': [],
                                 '0_postA': [], '0_postB': [], '0_postC': [], '0_postD': []}
         self.decoding_crosstemp_score = {}
         self.decoder_dict = {}
@@ -175,11 +175,18 @@ class RNN(nn.Module):
             print(f'RNN model saved as {self.file_name}')
 
 class RNN_MNM(RNN):
-    def __init__(self, n_stim, n_nodes, init_std_scale=0.1):
+    def __init__(self, n_stim, n_nodes, init_std_scale=0.1, accumulate=False):
+        self.accumulate = accumulate
         super().__init__(n_stim=n_stim, n_nodes=n_nodes, init_std_scale=init_std_scale)  # init like normal RNN
         self.lin_output = nn.Linear(self.n_nodes, self.n_stim + 2)  # override output
         self.rnn_name = 'RNN-MNM (not saved)'
         self.test_loss_split['MNM'] = []
+
+    def init_state(self):
+        '''Initialise hidden state to random values N(0, 0.1)'''
+        self.state = torch.randn(self.n_nodes) * self.init_std_scale  # initialise s_{-1}
+        if self.accumulate:
+            self.history_mnm = torch.zeros(2)
 
     def forward(self, inp, rnn_state=None):
         '''Perform one forward step given input and hidden state. If hidden state
@@ -194,7 +201,13 @@ class RNN_MNM(RNN):
         linear_output = self.lin_output(new_state.squeeze())
         output = torch.zeros_like(linear_output)  # we will normalise the prediction task & MNM separately:
         output[:self.n_stim] = F.softmax(linear_output[:self.n_stim], dim=0)  # output nonlin-lin of the prediction task (normalised on these only )
-        output[self.n_stim:] = F.softmax(linear_output[self.n_stim:], dim=0)  # probabilities units for M and NM (normalised)
+        if self.accumulate is False:
+            output[self.n_stim:] = F.softmax(linear_output[self.n_stim:], dim=0)  # probabilities units for M and NM (normalised)
+        elif self.accumulate:
+            new_hist = F.relu(linear_output[self.n_stim:]) + self.history_mnm
+            output[self.n_stim:] = F.softmax(new_hist, dim=0) # accumulate signal
+            # output[self.n_stim:] = 0.5 * (torch.tanh(new_hist) + 1)# accumulate signal
+            self.history_mnm = new_hist  # save for next iter
         return new_state, output
 
     def save_model(self, folder=None, verbose=True, add_nnodes=False):  # redefine because we want to change saving name
@@ -250,7 +263,7 @@ def tau_loss(y_est, y_true, tau_array=np.array([2, 3]), label=None, match_times=
     return total_loss, (ce, reg_loss, ce_match)
 
 def split_loss(y_est, y_true, tau_array=np.array([2, 3]), label=None, match_times=[13, 14],
-               time_prediction_array_dict={'B': [5, 6], 'C': [9, 10], 'D': [13, 14],
+               time_prediction_array_dict={'B': [5, 6], 'C': [9, 10], 'C1': [9], 'C2': [10], 'D': [13, 14],
                                            '0': [4, 7, 8, 11, 12, 15, 16], '0_postA': [4],
                                            '0_postB': [7, 8], '0_postC': [11, 12], '0_postD': [15, 16]},
                model=None, reg_param=0.001, return_ratio_ce=False):
@@ -457,14 +470,15 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/'):
             labels_train, labels_test = tmp1
 
             ## Initiate RNN model
-            rnn = RNN(n_stim=d_dict['n_freq'], n_nodes=t_dict['n_nodes'])  # Create RNN class
+            # rnn = RNN(n_stim=d_dict['n_freq'], n_nodes=t_dict['n_nodes'])  # Create RNN class
+            rnn = RNN_MNM(n_stim=d_dict['n_freq'], n_nodes=t_dict['n_nodes'], accumulate=True)  # Create RNN class
             opt = torch.optim.SGD(rnn.parameters(), lr=t_dict['learning_rate'])  # call optimiser from pytorhc
             rnn.set_info(param_dict={**d_dict, **t_dict})
 
             ## Train with BPTT
             rnn = bptt_training(rnn=rnn, optimiser=opt, dict_training_params=t_dict,
-                        x_train=x_train, x_test=x_test, y_train=y_train, y_test=y_test,
-                        verbose=0)
+                                x_train=x_train, x_test=x_test, y_train=y_train, y_test=y_test,
+                                labels_train=labels_train, labels_test=labels_test, verbose=0)
 
             ## Decode cross temporally
             score_mat, decoder_dict, _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,

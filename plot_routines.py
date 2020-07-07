@@ -61,10 +61,12 @@ def plot_weights(rnn_layer, ax=None, title='weights', xlabel='',
     weights = [x for x in rnn_layer.parameters()][0].detach().numpy()
     if weight_order is not None and weights.shape[0] == len(weight_order):
         weights = weights[weight_order, :]
-    if weight_order is not None and weights.shape[1] == len(weight_order):
+    elif weight_order is not None and weights.shape[1] == len(weight_order):
         weights = weights[:, weight_order]
+    else:
+        print(f'weight order not implemented because the size is different. weights: {weight.shape}, order: {weight_order.shape}')
     cutoff = np.percentile(np.abs(weights), 95)
-    sns.heatmap(weights, ax=ax, cmap='PiYG', vmax=cutoff, vmin=-1 * cutoff)
+    sns.heatmap(weights, ax=ax, cmap='PuOr', vmax=cutoff, vmin=-1 * cutoff)
     bottom, top = ax.get_ylim()
     ax.set_ylim(bottom + 0.5, top - 0.5)
     ax.set_title(title, weight='bold');
