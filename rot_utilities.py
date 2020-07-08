@@ -44,17 +44,33 @@ def find_max_or_min(array, dimension=0):
     minmax[ind_amax] = amax[ind_amax]
     return minmax
 
-def find_stable_switch_neurons_activity(forw_mat, diff_th=1):
-    tt = 'train'
-    n_tp_sign = 2
+def find_stable_switch_neurons_activity(forw_mat, diff_th=1, n_tp_sign=2, tt='test'):
+    """Identify switch and stable cells, and return numbers & indices of these.
+
+    Parameters
+    ----------
+    forw_mat : dict
+        activity matrix .
+    diff_th : float, default: 1
+        threshold that determins when tuning is significant.
+    n_tp_sign : int, default; 2
+        number of time points for which tuning has to be significant (no particular order/adjacency).
+    tt : str, 'train' or 'test' (default)
+        trial type.
+
+    Returns
+    -------
+    2-tuple, 2-tuple
+        (number of stable cells, number of switch cells), (inds stable cells, inds switch cells)
+    """
     labels_use_1 = np.array([x[0] == '1' for x in forw_mat['labels_' + tt]])
     labels_use_2 = np.array([x[0] == '2' for x in forw_mat['labels_' + tt]])
     mean_response_1 = forw_mat[tt][labels_use_1, :, :].mean(0)
     mean_response_2 = forw_mat[tt][labels_use_2, :, :].mean(0)
     diff_mat = mean_response_1 - mean_response_2  # differen ce between mean response of 1X and 2X
-    assert diff_mat.shape == (17, 20) # times x neurons
+    assert diff_mat.shape == (17, 20), 'activity matrix has a different shape than 17x20' # times x neurons
 
-    arr_1_code = np.sum(diff_mat > diff_th, 0)  # different larger than threhsold => 1 coding
+    arr_1_code = np.sum(diff_mat > diff_th, 0)  #  how many time points difference larger than threhsold => 1 coding
     arr_2_code = np.sum(diff_mat < -1 * diff_th, 0) # 2 coding
     bool_1_code = arr_1_code >= n_tp_sign  # at least this many time points
     bool_2_code = arr_2_code >= n_tp_sign
@@ -67,6 +83,25 @@ def find_stable_switch_neurons_activity(forw_mat, diff_th=1):
     stable_inds = np.where(stable_neurons == True)[0]
     switch_inds = np.where(switch_neurons == True)[0]
     return (n_stable_neurons, n_switch_neurons), (stable_inds, switch_inds)
+
+def connect_mnm_stsw(rnn, stable_inds=np.array([]), switch_inds=np.array([]),
+                     weight_threshold=0.1, verbose=0):
+    assert rnn.lin_output.out_features > rnn.n_stim, 'this RNN does not have M and NM output neurons'
+    assert rnn.lin_output.out_features == 10
+    output_ind = {'match': 8, 'nonmatch': 9}  # inds of output neurons
+    st_sw_neurons = {'stable': np.array(stable_inds), 'switch': np.array(switch_inds)}
+    sign_weight_types = {kk: {'stable': 0, 'switch': 0} for kk in output_ind.keys()} # to store the counts
+    output_weight_mat = [x for x in rnn.lin_output.parameters()][0].detach().numpy()  # get parameters from generator object
+    assert output_weight_mat.shape == (rnn.lin_output.out_features, rnn.n_nodes)
+    for key, ind in output_ind.items():  # loop through M and NM
+        out_proj = output_weight_mat[ind, :]  #output weights
+        sign_neurons = np.where(np.abs(out_proj) > weight_threshold)[0]  # significant output neurons
+        if verbose > 0:
+            print(f'{key}, sign neurons: {sign_neurons}, neuron types: {st_sw_neurons}')
+        for neuron_type in st_sw_neurons.keys():
+            mutual_neurons = np.intersect1d(sign_neurons, st_sw_neurons[neuron_type])  # find intersection with stablea nd switch indices
+            sign_weight_types[key][neuron_type] = len(mutual_neurons) # save number of such neurons
+    return sign_weight_types
 
 def create_color_mat(x, c):
     c_mat = np.zeros((len(x) - 1, 4))

@@ -1028,3 +1028,113 @@ def plot_network_size(rnn_folder, ax=None, plot_fun=None):
     ax.set_xlabel('Number of neurons ' + r'$N$')
     ax.set_ylabel('Cross entropy ' + r'$H$')
     return ax, df_data
+
+def plot_bar_switch_rnn_types(df_stable_switch, plottype='bar', ax=None, neuron_type='n_switch',
+                              rnn_types_list=['prediction_only', 'mnm_acc', 'mnm_nonacc'],
+                              label_dict={'prediction_only': 'Prediction only',
+                                          'mnm_acc': 'Prediction + (accumulated)\nMatch/Non-Match',
+                                          'mnm_nonacc': 'Prediction + Match/Non-Match'}):
+    if ax is None:
+        ax = plt.subplot(111)
+
+    n_unique_sw = int(df_stable_switch[neuron_type].max() + 1)
+    df_switch_summary = pd.DataFrame({**{neuron_type: np.arange(n_unique_sw)},
+                                      **{key: np.zeros(n_unique_sw) for key in rnn_types_list}})
+    for n_sw in range(n_unique_sw):
+        df_switch_summary[neuron_type].iat[n_sw] = n_sw
+        for key in rnn_types_list:
+            df_switch_summary[key].iat[n_sw] = len(np.where(df_stable_switch[df_stable_switch['rnn_type'] == key][neuron_type] == n_sw)[0])
+    for key in rnn_types_list:
+        df_switch_summary[key] /= df_switch_summary[key].sum()
+
+    if neuron_type == 'n_switch':
+        colour_types = {'prediction_only': 'k', 'mnm_acc': '#44bed4',
+                        'mnm_nonacc': 'green'}
+    elif neuron_type == 'n_stable':
+        colour_types = {'prediction_only': 'k', 'mnm_acc': '#9c0624',
+                        'mnm_nonacc': 'green'}
+    n_rnns = len(rnn_types_list)
+    width_dict = {2: 0.35, 3: 0.27}
+    for i_type, rnn_type in enumerate(rnn_types_list):
+        if plottype == 'bar':
+            ax.bar(x=df_switch_summary[neuron_type] + i_type * width_dict[n_rnns] - 0.15, height=df_switch_summary[rnn_type],
+                    width=width_dict[n_rnns], label=label_dict[rnn_type], color=colour_types[rnn_type])
+        elif plottype == 'cumulative':
+            ax.plot(np.cumsum(df_switch_summary[rnn_type]), linewidth=3, marker='o',
+                    label=label_dict[rnn_type], color=colour_types[rnn_type])
+    if neuron_type == 'n_switch':
+        ax.legend(frameon=False, bbox_to_anchor=(0.15, 1))
+    elif neuron_type == 'n_stable':
+        ax.legend(frameon=False, bbox_to_anchor=(0.65, 1))
+    if plottype == 'bar':
+        ax.set_xticks(df_switch_summary[neuron_type])
+    # ax.set_xlim([0, 20])
+    ax.set_xlabel(f'# {neuron_type[2].upper()}{neuron_type[3:]} neurons'); ax.set_ylabel('Fraction of runs')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    return ax
+
+def plot_mnm_stsw(df_stable_switch, ax_match=None, ax_nonmatch=None, rnn_type='mnm_acc'):
+    df_use = df_stable_switch[df_stable_switch['rnn_type'] == rnn_type]
+    if ax_match is None:
+        ax_match = plt.subplot(111)
+    # if ax_nonmatch is None:
+    #     ax_nonmatch = plt.subplot(122)
+
+    mnm_names = {'match': 'm', 'nonmatch': 'nm'}
+    mnm_axes = {'match': ax_match, 'nonmatch': ax_nonmatch}
+    stsw_names = {'stable': 'st', 'switch': 'sw'}
+    # for mnm_type, mnm_ax in mnm_axes.items():
+    #     for stsw_long, stsw_short in stsw_names.items():
+    #         mnm_ax.hist(df_use[f'n_{mnm_names[mnm_type]}_{stsw_short}'], histtype='step',
+    #                       linewidth=2, label=stsw_long, density=True)
+    #     mnm_ax.set_title(mnm_type, weight='bold')
+    #     mnm_ax.spines['top'].set_visible(False)
+    #     mnm_ax.spines['right'].set_visible(False)
+    #     mnm_ax.set_xlabel(f'# {mnm_type} cells')
+    #     mnm_ax.set_ylabel('Fraction of runs')
+    # ax_match.legend(frameon=False)
+
+    n_rows = 4 * len(df_use)  # split m and nm and st/sw
+    df_plot = pd.DataFrame({**{x: np.zeros(n_rows, dtype='object') for x in ['mnm', 'stsw']},
+                            **{x: np.zeros(n_rows) for x in ['count']}})
+    for i_rnn in range(len(df_use)):
+        i_1 = 4 * i_rnn
+        i_2 = 4 * i_rnn + 1
+        i_3 = 4 * i_rnn + 2
+        i_4 = 4 * i_rnn + 3
+        df_plot['mnm'].iat[i_1] = 'Match'
+        df_plot['mnm'].iat[i_2] = 'Non-match'
+        df_plot['mnm'].iat[i_3] = 'Match'
+        df_plot['mnm'].iat[i_4] = 'Non-match'
+        df_plot['stsw'].iat[i_1] = 'Stable'
+        df_plot['stsw'].iat[i_2] = 'Stable'
+        df_plot['stsw'].iat[i_3] = 'Switch'
+        df_plot['stsw'].iat[i_4] = 'Switch'
+        df_plot['count'].iat[i_1] = df_use['n_m_st'].iat[i_rnn]
+        df_plot['count'].iat[i_2] = df_use['n_nm_st'].iat[i_rnn]
+        df_plot['count'].iat[i_3] = df_use['n_m_sw'].iat[i_rnn]
+        df_plot['count'].iat[i_4] = df_use['n_nm_sw'].iat[i_rnn]
+    # sns.violinplot(data=df_plot, x='stsw', y='count', hue='mnm', ax=ax_match, split=True)
+    # sns.pointplot(data=df_plot, x='stsw', y='count', hue='mnm', ax=ax_match, split=True)
+    # p_val = {key: scipy.stats.wilcoxon(df_use[f'n_{short}_st'], df_use[f'n_{short}_sw'],
+    #                                        alternative='two-sided')[1] for key, short in mnm_names.items()}
+    # stsw_colours = sns.color_palette("Set1", n_colors=2)
+    stsw_colours = [(156 / 256, 6 / 256, 36 / 256), # stable
+                    (68 / 256, 190 / 256, 212 / 256)]  # switch
+    sns.pointplot(data=df_plot, hue='stsw', y='count', x='mnm', ax=ax_match,
+                  split=True, palette=stsw_colours)
+    p_val = {key: scipy.stats.wilcoxon(df_use[f'n_m_{short}'], df_use[f'n_nm_{short}'],
+                                           alternative='two-sided')[1] for key, short in stsw_names.items()}
+    ax_match.text(s=f'P = {np.round(p_val["stable"], 5)}', x=0.34, y=5,
+                  c=stsw_colours[0], fontdict={'weight': 'bold'})
+    ax_match.text(s=f'P = {np.round(p_val["switch"], 2)}', x=0.34, y=2.5,
+                  c=stsw_colours[1], fontdict={'weight': 'bold'})
+    ax_match.legend(frameon=False, bbox_to_anchor=(1.1, 1))
+    ax_match.set_title('Match neurons receive more Stable projections', weight='bold', y=1.05)
+    ax_match.spines['top'].set_visible(False)
+    ax_match.spines['right'].set_visible(False)
+    ax_match.set_xlabel('')
+    ax_match.set_ylabel('# projecting neurons')
+
+    return (ax_match, ax_nonmatch)

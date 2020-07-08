@@ -404,7 +404,7 @@ def bptt_training(rnn, optimiser, dict_training_params,
         return rnn
 
 def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
-                  save_inplace=True, label_name='alpha', sparsity_c=1e-1):
+                  save_inplace=True, label_name='alpha', sparsity_c=1e-1, bool_train_decoder=True):
     n_nodes = rnn_model.info_dict['n_nodes']
     forw_mat = {'train': np.zeros((x_train.shape[0], x_train.shape[1], n_nodes)),  # trials x time x neurons
                 'test': np.zeros((x_test.shape[0], x_test.shape[1], n_nodes))}
@@ -430,40 +430,44 @@ def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
                                                    rnn_state=hidden_state)
                 forw_mat['test'][kk, tau, :] = hidden_state.numpy()
 
-        ## Train decoder
-        alpha_labels = {'train': np.array([int(x[0]) for x in labels_train]),
-                        'test': np.array([int(x[0]) for x in labels_test])}
-        beta_labels = {'train': np.array([int(x[1]) for x in labels_train]),
-                       'test': np.array([int(x[1]) for x in labels_test])}
-        if label_name == 'alpha':
-            labels_use = alpha_labels
-        elif label_name == 'beta':
-            labels_use = beta_labels
-        else:
-            print(f'Label name {label_name} not implemented. Please choose alpha or beta. Aborting')
-            return None
-        score_mat = np.zeros((n_times, n_times))  # T x T
-        decoder_dict = {}  # save decoder per time
-        tmp_var = True
-        for tau in range(n_times):  # train time loop
-            # decoder_dict[tau] = sklearn.svm.LinearSVC(C=sparsity_c)  # define SVM
-            decoder_dict[tau] = sklearn.linear_model.LogisticRegression(C=sparsity_c,
-                                                    solver='saga', penalty='l1', max_iter=250)  # define log reg
-            decoder_dict[tau].fit(X=forw_mat['train'][:, tau, :],
-                                  y=labels_use['train'])  # train SVM
-            for tt in range(n_times):  # test time loop
-                # score_mat[tau, tt] = decoder_dict[tau].score(X=forw_mat['test'][:, tt, :],
-                #                                              y=labels_use['test'])  # evaluate
-                prediction = decoder_dict[tau].predict_proba(X=forw_mat['test'][:, tt, :])
-                inds_labels = np.zeros_like(labels_use['test'])  # zero = class 0
-                inds_labels[(labels_use['test'] == decoder_dict[tau].classes_[1])] = 1
-                prob_correct = np.array([prediction[i_pred, ind] for i_pred, ind in enumerate(inds_labels)])
-                score_mat[tau, tt] = np.mean(prob_correct)
-                # score_mat[tau, tt] = np.exp(np.mean(np.log(prob_correct)))
-    if save_inplace:
-        rnn_model.decoding_crosstemp_score[label_name] = score_mat
-        rnn_model.decoder_dict[label_name] = decoder_dict
-    return score_mat, decoder_dict, forw_mat
+        if bool_train_decoder:
+            ## Train decoder
+            alpha_labels = {'train': np.array([int(x[0]) for x in labels_train]),
+                            'test': np.array([int(x[0]) for x in labels_test])}
+            beta_labels = {'train': np.array([int(x[1]) for x in labels_train]),
+                           'test': np.array([int(x[1]) for x in labels_test])}
+            if label_name == 'alpha':
+                labels_use = alpha_labels
+            elif label_name == 'beta':
+                labels_use = beta_labels
+            else:
+                print(f'Label name {label_name} not implemented. Please choose alpha or beta. Aborting')
+                return None
+            score_mat = np.zeros((n_times, n_times))  # T x T
+            decoder_dict = {}  # save decoder per time
+            tmp_var = True
+            for tau in range(n_times):  # train time loop
+                # decoder_dict[tau] = sklearn.svm.LinearSVC(C=sparsity_c)  # define SVM
+                decoder_dict[tau] = sklearn.linear_model.LogisticRegression(C=sparsity_c,
+                                                        solver='saga', penalty='l1', max_iter=250)  # define log reg
+                decoder_dict[tau].fit(X=forw_mat['train'][:, tau, :],
+                                      y=labels_use['train'])  # train SVM
+                for tt in range(n_times):  # test time loop
+                    # score_mat[tau, tt] = decoder_dict[tau].score(X=forw_mat['test'][:, tt, :],
+                    #                                              y=labels_use['test'])  # evaluate
+                    prediction = decoder_dict[tau].predict_proba(X=forw_mat['test'][:, tt, :])
+                    inds_labels = np.zeros_like(labels_use['test'])  # zero = class 0
+                    inds_labels[(labels_use['test'] == decoder_dict[tau].classes_[1])] = 1
+                    prob_correct = np.array([prediction[i_pred, ind] for i_pred, ind in enumerate(inds_labels)])
+                    score_mat[tau, tt] = np.mean(prob_correct)
+                    # score_mat[tau, tt] = np.exp(np.mean(np.log(prob_correct)))
+    if bool_train_decoder:
+        if save_inplace:
+            rnn_model.decoding_crosstemp_score[label_name] = score_mat
+            rnn_model.decoder_dict[label_name] = decoder_dict
+        return score_mat, decoder_dict, forw_mat
+    else:
+        return None, None, forw_mat
 
 def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/'):
     try:
@@ -503,7 +507,7 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/'):
 
 def train_single_decoder_new_data(rnn, ratio_expected=0.5, label='alpha',
                                   n_samples=None, ratio_train=0.8, verbose=False,
-                                  sparsity_c=0.1):
+                                  sparsity_c=0.1, bool_train_decoder=True):
     '''Generates new data, and then trains the decoder via train_decoder()'''
     if n_samples is None:
         n_samples = rnn.info_dict['n_total']
@@ -523,7 +527,8 @@ def train_single_decoder_new_data(rnn, ratio_expected=0.5, label='alpha',
     ## Train decoder:
     score_mat, decoder_dict, forward_mat = train_decoder(rnn_model=rnn, x_train=x_train, x_test=x_test,
                                            labels_train=labels_train, labels_test=labels_test,
-                                           save_inplace=True, sparsity_c=sparsity_c, label_name=label)
+                                           save_inplace=True, sparsity_c=sparsity_c, label_name=label,
+                                           bool_train_decoder=bool_train_decoder)
     forward_mat['labels_train'] = labels_train
     forward_mat['labels_test'] = labels_test
     return score_mat, decoder_dict, forward_mat
