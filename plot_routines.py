@@ -984,8 +984,8 @@ def plot_distr_networks(rnn_name_dict, rnn_folder='models/75-25_100models/', ver
     ax_var.add_patch(patches.FancyBboxPatch((test_times[0], train_times[0]), zorder=1,
                                         width=len(test_times), height=len(train_times),
                                        fill=False, edgecolor=color_patch, lw=lw_patch))  # patch in variance plot
-    ax_hist.add_patch(patches.FancyBboxPatch((-0.18, -5),
-                                    width=1.1, height=19, clip_on=False,
+    ax_hist.add_patch(patches.FancyBboxPatch((-0.18, -6),
+                                    width=1.1, height=21.1, clip_on=False,
                                     fill=False, edgecolor=color_patch, lw=lw_patch)) # box around histogram
     # line_top = patches.Arc(xy=(test_times[0] + 2, train_times[0] + 1.58), width=29.8, height=3.77,
     #                         theta1=270, theta2=360, clip_on=False, linewidth=lw_patch, color=color_patch) # top connecting line
@@ -1073,12 +1073,12 @@ def plot_bar_switch_rnn_types(df_stable_switch, plottype='bar', ax=None, neuron_
             ax.plot(np.concatenate((np.array([0]), np.cumsum(df_switch_summary[rnn_type]))), linewidth=3, marker='o',
                     label=label_dict[rnn_type], color=colour_types[rnn_type])
     if neuron_type == 'n_switch':
-        ax.legend(frameon=False)#, bbox_to_anchor=(0.15, 1))
+        ax.legend(frameon=False, loc='lower right')#, bbox_to_anchor=(0.15, 1))
     elif neuron_type == 'n_stable':
         ax.legend(frameon=False,  loc='upper left') #bbox_to_anchor=(0.5, 1))
     if plottype == 'bar':
         ax.set_xticks(df_switch_summary[neuron_type])
-    ax.set_xlabel(f'# {neuron_type[2].upper()}{neuron_type[3:]} neurons'); ax.set_ylabel('Fraction of runs')
+    ax.set_xlabel(f'# {neuron_type[2].upper()}{neuron_type[3:]} neurons');
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
 
@@ -1086,6 +1086,9 @@ def plot_bar_switch_rnn_types(df_stable_switch, plottype='bar', ax=None, neuron_
         _, p_val = scipy.stats.ks_2samp(np.concatenate((np.array([0]), np.cumsum(df_switch_summary[rnn_types_list[0]]))),
                                         np.concatenate((np.array([0]), np.cumsum(df_switch_summary[rnn_types_list[1]]))))
         print(p_val)
+        ax.set_ylabel('Cum. fraction of runs')
+    else:
+        ax.set_ylabel('Fraction of runs')
     return ax
 
 def plot_mnm_stsw(df_stable_switch, ax=None, ax_nonmatch=None, rnn_type='mnm_acc'):
@@ -1138,11 +1141,12 @@ def plot_mnm_stsw(df_stable_switch, ax=None, ax_nonmatch=None, rnn_type='mnm_acc
                   split=True, palette=stsw_colours)
     p_val = {key: scipy.stats.wilcoxon(df_use[f'n_m_{short}'], df_use[f'n_nm_{short}'],
                                            alternative='two-sided')[1] for key, short in stsw_names.items()}
-    ax.text(s=f'P = {np.round(p_val["stable"], 5)}', x=0.27, y=5.3,
+    print(p_val)
+    ax.text(s=f'P = {np.round(p_val["stable"], 8)}', x=0.27, y=5.3,
                   c=stsw_colours[0], fontdict={'weight': 'bold'})
-    ax.text(s=f'P = {np.round(p_val["switch"], 2)}', x=0.27, y=2.5,
+    ax.text(s=f'P = {np.round(p_val["switch"], 3)}', x=0.27, y=2.5,
                   c=stsw_colours[1], fontdict={'weight': 'bold'})
-    ax.legend(frameon=False, bbox_to_anchor=(1.1, 1))
+    ax.legend(frameon=False, bbox_to_anchor=(0.7, 0.85))
     # ax.set_title('Match neurons receive more Stable projections', weight='bold', y=1.05)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -1176,7 +1180,7 @@ def plot_figure_mnm(df_switch, rnn_mnm_folder, save_fig=False, train_times = np.
     ax_conv_top.spines['right'].set_visible(False)
     ax_conv_top.set_xlim([0, 20])
     ax_conv_top.set_ylim([-0.05, 1.05])
-    ax_conv_top.legend(frameon=False, loc='upper right')
+    ax_conv_top.legend(frameon=False, bbox_to_anchor=(1, 1.1))# loc='upper right')
     ## MNM prediction ??
 
 
@@ -1267,7 +1271,7 @@ def plot_figure_mnm(df_switch, rnn_mnm_folder, save_fig=False, train_times = np.
     fig.align_ylabels([ax_mean, ax_switch])
     fig.align_ylabels([ax_var, ax_stable])
     fig.text(s='A) RNN prediction + Match / Non-match (M/NM) task', x=-0.06, y=1, fontdict={'weight': 'bold'})
-    fig.text(s='B) ' + r'$\mathbf{H}$' + ' during training', x=0.66, y=1, fontdict={'weight': 'bold'})
+    fig.text(s='B) ' + r'$\it{\bf{H}}$' + ' during training', x=0.66, y=1, fontdict={'weight': 'bold'})
     fig.text(s='C) Distribution of cross-temporal ' + r'$\mathbf{\alpha}}$' + ' decoding accuracy', x=-0.06, y=0.65, fontdict={'weight': 'bold'})
     fig.text(s='D) Histogram of red regime', x=0.66, y=0.65, fontdict={'weight': 'bold'})
     fig.text(s='E) Number of switch neurons', x=-0.06, y=0.23, fontdict={'weight': 'bold'})
