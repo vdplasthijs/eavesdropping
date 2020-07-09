@@ -234,7 +234,7 @@ class RNN_MNM(RNN):
             print(f'RNN-MNM model saved as {self.file_name}')
 
 def tau_loss(y_est, y_true, tau_array=np.array([2, 3]), label=None, match_times=[13, 14],
-             model=None, reg_param=0.001, mnm_loss_separate=False):
+             model=None, reg_param=0.001, mnm_loss_separate=False, mnm_only=True):
     '''Compute Cross Entropy of given time array tau_array, and add L1 regularisation.'''
     y_est_trunc = y_est[:, tau_array, :model.n_stim]  # only evaluated these time points, cut off at N_stim, because for M and NM these follow after
     y_true_trunc = y_true[:, tau_array, :]
@@ -268,15 +268,17 @@ def tau_loss(y_est, y_true, tau_array=np.array([2, 3]), label=None, match_times=
             ce_match = 0.5 * (ce_match_only + ce_nonmatch_only) # mean
     else:
         ce_match = 0
-
-    total_loss = ce + reg_loss + ce_match
+    if mnm_only:
+        total_loss = reg_loss + ce_match  #  + ce
+    else:
+        total_loss = reg_loss + ce_match  + ce
     return total_loss, (ce, reg_loss, ce_match)
 
 def split_loss(y_est, y_true, tau_array=np.array([2, 3]), label=None, match_times=[13, 14],
                time_prediction_array_dict={'B': [5, 6], 'C': [9, 10], 'C1': [9], 'C2': [10], 'D': [13, 14],
                                            '0': [4, 7, 8, 11, 12, 15, 16], '0_postA': [4],
                                            '0_postB': [7, 8], '0_postC': [11, 12], '0_postD': [15, 16]},
-               model=None, reg_param=0.001, return_ratio_ce=False):
+               model=None, reg_param=0.001, return_ratio_ce=False, mnm_only=True):
     '''Compute Cross Entropy for each given time array, and L1 regularisation.'''
     assert model is not None
     for key, tau_array in time_prediction_array_dict.items():  # compute separate times separately
@@ -292,7 +294,8 @@ def split_loss(y_est, y_true, tau_array=np.array([2, 3]), label=None, match_time
 
     model.test_loss_split['L1'].append(float(reg_loss.detach().numpy()))  # add to array
     model.test_loss_split['MNM'].append(float(ce_match.detach().numpy()))
-
+    if mnm_only:
+        total_loss = reg_loss + ce_match
     if return_ratio_ce is False:
         return total_loss
     elif return_ratio_ce:
