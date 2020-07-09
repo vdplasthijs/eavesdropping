@@ -486,7 +486,7 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/'):
 
             ## Initiate RNN model
             # rnn = RNN(n_stim=d_dict['n_freq'], n_nodes=t_dict['n_nodes'])  # Create RNN class
-            rnn = RNN_MNM(n_stim=d_dict['n_freq'], n_nodes=t_dict['n_nodes'], accumulate=False)  # Create RNN class
+            rnn = RNN_MNM(n_stim=d_dict['n_freq'], n_nodes=t_dict['n_nodes'], accumulate=True)  # Create RNN class
             opt = torch.optim.SGD(rnn.parameters(), lr=t_dict['learning_rate'])  # call optimiser from pytorhc
             rnn.set_info(param_dict={**d_dict, **t_dict})
 
