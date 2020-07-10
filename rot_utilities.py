@@ -166,3 +166,8 @@ def labels_to_mnm(labels):
             match_array[i_label, 0] = (label[0] == label[1])
         match_array[:, 1] = np.logical_not(match_array[:, 0])
         return match_array
+
+def get_train_test_diag():
+    tmp_train, tmp_test = (np.array([8, 9, 10, 9, 10, 11, 10, 11, 12, 11, 12, 13, 12, 13, 14, 13, 14, 15, 14, 15, 16, 15, 16, 16]),
+                           np.array([4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 12]))
+    return (tmp_train, tmp_test)

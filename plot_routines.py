@@ -28,6 +28,16 @@ for ii, x in enumerate(plt.rcParams['axes.prop_cycle']()):
         break  # after 8 it repeats (for ever)
 plt.rcParams['axes.prop_cycle'] = cycler(color=sns.color_palette('colorblind'))
 
+def set_fontsize(font_size=12):
+    plt.rcParams['font.size'] = font_size
+    plt.rcParams['axes.autolimit_mode'] = 'data' # default: 'data'
+    params = {'legend.fontsize': font_size,
+             'axes.labelsize': font_size,
+             'axes.titlesize': font_size,
+             'xtick.labelsize': font_size,
+             'ytick.labelsize': font_size}
+    plt.rcParams.update(params)
+
 ## Some labels needed by a lot of funtions:
 single_time_labels = ['0', 'A', '0', 'B', '0', 'C', '0', 'D', '0']
 double_time_labels = []
@@ -124,7 +134,11 @@ def plot_train_test_perf(rnn_model, ax=None, train=True, test=True):
     return ax
 
 def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
-                    plot_top=True, plot_bottom=True, list_top=None):
+                    plot_top=True, plot_bottom=True, list_top=None, lw=3,
+                    label_dict_keys = {'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D', 'L1': r'$L_1$',
+                                       'MNM': 'M/NM', '0': '0', 'C1': r'$C_1$', 'C2': 'r$C_2$', 'pred': 'total',
+                                      '0_postA': '0_A', '0_postB': '0_B', '0_postC': '0_C', '0_postD': '0_D'},
+                    linestyle_custom_dict={}, colour_custom_dict={}):
     if ax_top is None and plot_top:
         ax_top = plt.subplot(211)
     if ax_bottom is None and plot_bottom:
@@ -140,28 +154,34 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
             n_tp = len(rnn.test_loss_split['B'])
             assert n_tp == rnn.info_dict['n_epochs']  # double check and  assume it is the same for all rnns in rnn_folder\
             conv_dict = {key: np.zeros((n_rnn, n_tp)) for key in rnn.test_loss_split.keys()}
+            conv_dict['pred'] = np.zeros((n_rnn, n_tp))
         for key, arr in rnn.test_loss_split.items():
             conv_dict[key][i_rnn, :] = arr.copy()
+        conv_dict['pred'][i_rnn, :] = np.sum([conv_dict[key][i_rnn, :] for key in ['0', 'B', 'C', 'D']], 0)
 
     i_plot_total = 0
     dict_keys = list(conv_dict.keys())[::-1]
-    colour_dict_keys = {key: color_dict_stand[it] for it, key in enumerate(['B', 'C', 'D', 'L1', 'MNM', '0'])}
+    colour_dict_keys = {key: color_dict_stand[it] for it, key in enumerate(['B', 'C', 'D', 'L1', 'MNM', '0', 'pred'])}
     colour_dict_keys['0'] = color_dict_stand[7]
-    label_dict_keys = {key: key for key in dict_keys}
-    label_dict_keys['MNM'] = 'M/NM'
+    for key, val in colour_custom_dict.items():
+        colour_dict_keys[key] = val
+    linestyle_dict_keys = {x: '-' for x in label_dict_keys.keys()}
+    for key, val in linestyle_custom_dict.items():
+        linestyle_dict_keys[key] = val
+
     for key in dict_keys:
         mat = conv_dict[key]
         mat = mat / mat[:, 0][:, np.newaxis]
         plot_arr = np.mean(mat, 0)
         if plot_top:
             if (list_top is not None and key in list_top) or (list_top is None and '_' not in key and 'L' not in key):
-                ax_top.plot(plot_arr, label=label_dict_keys[key], linestyle='-', linewidth=3, color=colour_dict_keys[key])
+                ax_top.plot(plot_arr, label=label_dict_keys[key], linestyle=linestyle_dict_keys[key], linewidth=lw, color=colour_dict_keys[key])
                 ax_top.fill_between(x=np.arange(len(plot_arr)), y1=plot_arr - np.std(mat, 0),
                                     y2=plot_arr + np.std(mat, 0), alpha=0.2, color=colour_dict_keys[key])
                 i_plot_total += 1
         if plot_bottom:
             if key == 'L1':
-                ax_bottom.plot(plot_arr, label=key, linestyle='-', linewidth=3, color=colour_dict_keys[key])
+                ax_bottom.plot(plot_arr, label=key, linestyle='-', linewidth=lw, color=colour_dict_keys[key])
                 ax_bottom.fill_between(x=np.arange(len(plot_arr)), y1=plot_arr - np.std(mat, 0),
                                     y2=plot_arr + np.std(mat, 0), alpha=0.2, color=colour_dict_keys[key])
                 i_plot_total += 1
@@ -176,6 +196,30 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
 
     return (ax_top, ax_bottom)
 
+def plot_split_perf_custom(folder_pred, folder_mnmpred, folder_mnm, ax=None):
+    if ax is None:
+        ax = plt.subplot(111)
+
+    ## prediction only
+    _ = plot_split_perf(rnn_folder=folder_pred, list_top=['pred'], lw=3,
+                        linestyle_custom_dict={'pred': '-'}, colour_custom_dict={'pred': 'blue'},
+                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': 'Pred performance - (Pred-only networks)'})
+
+    ## mnm only
+    _ = plot_split_perf(rnn_folder=folder_mnm, list_top=['MNM'], lw=5,
+                        linestyle_custom_dict={'MNM': '-'}, colour_custom_dict={'MNM': 'green'},
+                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'MNM': 'MNM performance - (MNM-only networks)'})
+
+    ## mnm+ prediction only
+    _ = plot_split_perf(rnn_folder=folder_mnmpred, list_top=['pred', 'MNM'], lw=5,
+                        linestyle_custom_dict={'pred': ':', 'MNM': '-'}, colour_custom_dict={'pred': 'k', 'MNM': 'k'},
+                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': 'Pred performance - (Pred & MNM networks)', 'MNM': 'MNM performance - (Pred & MNM networks)'})
+
+    ax.legend(frameon=False, bbox_to_anchor=(1.8, 1))
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    return ax
+
 def plot_decoder_crosstemp_perf(score_matrix, ax=None, ticklabels='', cmap_hm = 'BrBG', v_max=None, c_bar=True,
                                 save_fig=False, fig_name='figures/example_low_crosstempmat.pdf', fontsize_ticks=10):
     '''Plot matrix of cross temporal scores for decoding'''
@@ -185,13 +229,14 @@ def plot_decoder_crosstemp_perf(score_matrix, ax=None, ticklabels='', cmap_hm = 
 
     # cmap_hm = 'Greys'
     hm = sns.heatmap(score_matrix, cmap=cmap_hm, xticklabels=ticklabels, cbar=c_bar,
-                           yticklabels=ticklabels, ax=ax, vmin=0, vmax=v_max,
-                           linewidths=0.1, linecolor='k')
+                     yticklabels=ticklabels, ax=ax, vmin=0, vmax=v_max,
+                     linewidths=0.1, linecolor='k')
+    ax.invert_yaxis()
     ax.set_yticklabels(rotation=90, labels=ax.get_yticklabels(), fontsize=fontsize_ticks)
     ax.set_xticklabels(rotation=0, labels=ax.get_xticklabels(), fontsize=fontsize_ticks)
     bottom, top = ax.get_ylim()
     ax.set_ylim(bottom + 0.5, top - 0.5)
-    ax.set_ylabel(r'$\longleftarrow$' + ' Training time ' + r"$\tau$"); ax.set_xlabel('Testing time t ' + r'$\longrightarrow$')
+    ax.set_ylabel('Training time ' + r"$\tau$ $\longrightarrow$"); ax.set_xlabel('Testing time t ' + r'$\longrightarrow$')
     ax.set_title('Cross-temporal decoding score\nCorrelated single example', weight='bold');
     if save_fig:
         plt.savefig(fig_name, bbox_inches='tight')
@@ -916,7 +961,11 @@ def plot_distr_networks(rnn_name_dict, rnn_folder='models/75-25_100models/', ver
     if verbose:
         print(f'shape agg: {agg_score_alpha.shape}')
         print(f'train times: {train_times}, test times: {test_times}')
-    summ_accuracy = agg_score_alpha[:, train_times, :][:, :, test_times].mean((1, 2))  # average of patch
+    train_times, test_times = ru.get_train_test_diag()
+    summ_accuracy = agg_score_alpha[:, train_times, test_times] # .mean((1, 2))  # average of patch
+    print(summ_accuracy.shape)
+    summ_accuracy = np.mean(np.squeeze(summ_accuracy), 1)
+    print(summ_accuracy.shape)
     alpha_diag = np.diag(agg_score_alpha.mean(0))
     beta_diag = np.diag(agg_score_beta.mean(0))
     alpha_diag_err = np.diag(agg_score_alpha.std(0))
@@ -962,6 +1011,7 @@ def plot_distr_networks(rnn_name_dict, rnn_folder='models/75-25_100models/', ver
     ax_hist.set_xlabel('Average accuracy')
     ax_hist.set_ylabel('Frequency');
     # ax_hist.set_title('Histogram of patch', weight='bold')
+    print(summ_accuracy)
     n, bins, hist_patches = ax_hist.hist(summ_accuracy, color='k', bins=np.linspace(0, 1, 21),
                                          rwidth=0.9, alpha=0.9)
     ## Colour hist bars: https://stackoverflow.com/questions/23061657/plot-histogram-with-colors-taken-from-colormap
@@ -978,15 +1028,15 @@ def plot_distr_networks(rnn_name_dict, rnn_folder='models/75-25_100models/', ver
     ## Add patches
     color_patch  = '#8f0d1e'
     lw_patch = 3
-    ax_mean.add_patch(patches.FancyBboxPatch((test_times[0], train_times[0]),
-                                        width=len(test_times), height=len(train_times),
-                                       fill=False, edgecolor=color_patch, lw=lw_patch))  # patch in variance plot
-    ax_var.add_patch(patches.FancyBboxPatch((test_times[0], train_times[0]), zorder=1,
-                                        width=len(test_times), height=len(train_times),
-                                       fill=False, edgecolor=color_patch, lw=lw_patch))  # patch in variance plot
-    ax_hist.add_patch(patches.FancyBboxPatch((-0.18, -6),
-                                    width=1.1, height=21.1, clip_on=False,
-                                    fill=False, edgecolor=color_patch, lw=lw_patch)) # box around histogram
+    # ax_mean.add_patch(patches.FancyBboxPatch((test_times[0], train_times[0]),
+    #                                     width=len(test_times), height=len(train_times),
+    #                                    fill=False, edgecolor=color_patch, lw=lw_patch))  # patch in variance plot
+    # ax_var.add_patch(patches.FancyBboxPatch((test_times[0], train_times[0]), zorder=1,
+    #                                     width=len(test_times), height=len(train_times),
+    #                                    fill=False, edgecolor=color_patch, lw=lw_patch))  # patch in variance plot
+    # ax_hist.add_patch(patches.FancyBboxPatch((-0.18, -6),
+    #                                 width=1.1, height=21.1, clip_on=False,
+    #                                 fill=False, edgecolor=color_patch, lw=lw_patch)) # box around histogram
     # line_top = patches.Arc(xy=(test_times[0] + 2, train_times[0] + 1.58), width=29.8, height=3.77,
     #                         theta1=270, theta2=360, clip_on=False, linewidth=lw_patch, color=color_patch) # top connecting line
     # ax_var.add_patch(line_top)
@@ -1009,13 +1059,13 @@ def plot_distr_networks(rnn_name_dict, rnn_folder='models/75-25_100models/', ver
     fig.align_ylabels(axs=[ax_auto[0], ax_auto[1], ax_hist])
     fig.align_ylabels(axs=[ax_mean, ax_ctmat['high']])
 
-    ax_ctmat['high'].text(s='A) Cross-temporal ' + r'$\mathbf{\alpha}$' + '-decoding accuracy', x=-5.75, y=-4,
+    ax_ctmat['high'].text(s='A) Cross-temporal ' + r'$\mathbf{\alpha}$' + '-decoding accuracy', x=-5.75, y=20,
                           fontdict={'fontsize': fontsize,  'weight': 'bold'})
-    ax_ctmat['high'].text(s='B) Distribution of cross-temporal '+ r'$\mathbf{\alpha}$' + '-decoding accuracy', x=-5.75, y=28,
+    ax_ctmat['high'].text(s='B) Distribution of cross-temporal '+ r'$\mathbf{\alpha}$' + '-decoding accuracy', x=-5.75, y=-8.8,
                           fontdict={'fontsize': fontsize,  'weight': 'bold'})
-    ax_ctmat['high'].text(s='C) Auto-temporal accuracy', x=75, y=-4,
+    ax_ctmat['high'].text(s='C) Auto-temporal accuracy', x=75, y=20,
                           fontdict={'fontsize': fontsize,  'weight': 'bold'})
-    ax_ctmat['high'].text(s='D) Histogram of red regime', x=75, y=39.5,
+    ax_ctmat['high'].text(s='D) Histogram of red regime', x=75, y=-18.5,
                           fontdict={'fontsize': fontsize, 'weight': 'bold'})
 
     return None
@@ -1070,12 +1120,14 @@ def plot_bar_switch_rnn_types(df_stable_switch, plottype='bar', ax=None, neuron_
             ax.bar(x=df_switch_summary[neuron_type] + i_type * width_dict[n_rnns] - 0.15, height=df_switch_summary[rnn_type],
                     width=width_dict[n_rnns], label=label_dict[rnn_type], color=colour_types[rnn_type])
         elif plottype == 'cumulative':
-            ax.plot(np.concatenate((np.array([0]), np.cumsum(df_switch_summary[rnn_type]))), linewidth=3, marker='o',
+            ax.plot(df_switch_summary[rnn_type], linewidth=3, marker='o',
                     label=label_dict[rnn_type], color=colour_types[rnn_type])
+            # ax.plot(np.concatenate((np.array([0]), np.cumsum(df_switch_summary[rnn_type]))), linewidth=3, marker='o',
+            #         label=label_dict[rnn_type], color=colour_types[rnn_type])
     if neuron_type == 'n_switch':
-        ax.legend(frameon=False, loc='lower right')#, bbox_to_anchor=(0.15, 1))
+        ax.legend(frameon=False, loc='upper right')#, bbox_to_anchor=(0.15, 1))
     elif neuron_type == 'n_stable':
-        ax.legend(frameon=False,  loc='upper left') #bbox_to_anchor=(0.5, 1))
+        ax.legend(frameon=False,  bbox_to_anchor=(-0.04, 1.15), loc='upper left') #55box_to_anchor=(0.5, 1))
     if plottype == 'bar':
         ax.set_xticks(df_switch_summary[neuron_type])
     ax.set_xlabel(f'# {neuron_type[2].upper()}{neuron_type[3:]} neurons');
@@ -1086,7 +1138,7 @@ def plot_bar_switch_rnn_types(df_stable_switch, plottype='bar', ax=None, neuron_
         _, p_val = scipy.stats.ks_2samp(np.concatenate((np.array([0]), np.cumsum(df_switch_summary[rnn_types_list[0]]))),
                                         np.concatenate((np.array([0]), np.cumsum(df_switch_summary[rnn_types_list[1]]))))
         print(p_val)
-        ax.set_ylabel('Cum. fraction of runs')
+        ax.set_ylabel('Fraction of runs')
     else:
         ax.set_ylabel('Fraction of runs')
     return ax
@@ -1174,11 +1226,14 @@ def plot_figure_mnm(df_switch, rnn_mnm_folder, save_fig=False, train_times = np.
     ## Convergence figs
     ax_conv_top = fig.add_subplot(gs_right_top[:, 0])
     # ax_conv_bottom = fig.add_subplot(gs_right_top[1, 0])
-    _ = plot_split_perf(rnn_folder=rnn_mnm_folder, list_top=['MNM', 'D', 'C'],
-                        ax_top=ax_conv_top, ax_bottom=None, plot_bottom=False)
-    ax_conv_top.spines['top'].set_visible(False)
-    ax_conv_top.spines['right'].set_visible(False)
-    ax_conv_top.set_xlim([0, 20])
+    # _ = plot_split_perf(rnn_folder=rnn_mnm_folder, list_top=['MNM', 'D', 'C'],
+    #                     ax_top=ax_conv_top, ax_bottom=None, plot_bottom=False)
+    #
+    _ = plot_split_perf_custom(folder_pred='models/75-25_SplitLoss_Xmodels/1000epochs/',
+                               folder_mnm='models/75-25_MNM_Xmodels/acc_mnm-only/',
+                               folder_mnmpred='models/75-25_MNM_Xmodels/accumulate/',
+                               ax=ax_conv_top)
+    # ax_conv_top.set_xlim([0, 20])
     ax_conv_top.set_ylim([-0.05, 1.05])
     ax_conv_top.legend(frameon=False, bbox_to_anchor=(1, 1.1))# loc='upper right')
     ## MNM prediction ??
@@ -1214,7 +1269,13 @@ def plot_figure_mnm(df_switch, rnn_mnm_folder, save_fig=False, train_times = np.
         tick.label.set_fontsize('x-small')
 
     ## Histogram
-    summ_accuracy = agg_score_alpha[:, train_times, :][:, :, test_times].mean((1, 2))  # average of patch
+    # summ_accuracy = agg_score_alpha[:, train_times, :][:, :, test_times].mean((1, 2))  # average of patch
+    train_times, test_times = ru.get_train_test_diag()
+    summ_accuracy = agg_score_alpha[:, train_times, test_times] # .mean((1, 2))  # average of patch
+    print(summ_accuracy.shape)
+    summ_accuracy = np.mean(np.squeeze(summ_accuracy), 1)
+    print(summ_accuracy.shape)
+
     ax_hist = fig.add_subplot(gs_middle_right[0, 0])  # histogram
     ax_hist.set_xlabel('Average accuracy')
     ax_hist.set_ylabel('Frequency');
@@ -1234,12 +1295,18 @@ def plot_figure_mnm(df_switch, rnn_mnm_folder, save_fig=False, train_times = np.
     ## Add patches
     color_patch  = '#8f0d1e'
     lw_patch = 3
-    ax_mean.add_patch(patches.FancyBboxPatch((test_times[0], train_times[0]),
-                                        width=len(test_times), height=len(train_times),
-                                       fill=False, edgecolor=color_patch, lw=lw_patch))  # patch in variance plot
-    ax_var.add_patch(patches.FancyBboxPatch((test_times[0], train_times[0]), zorder=1,
-                                        width=len(test_times), height=len(train_times),
-                                       fill=False, edgecolor=color_patch, lw=lw_patch))  # patch in variance plot
+    # ax_mean.add_patch(patches.FancyBboxPatch((test_times[0], train_times[0]),
+    #                                     width=len(test_times), height=len(train_times),
+    #                                    fill=False, edgecolor=color_patch, lw=lw_patch))  # patch in variance plot
+    tmp_patch = np.zeros((16, 2))
+    tmp_patch[::2, 0] = np.arange(8, 16) / 16
+    tmp_patch[1::2, 0] = np.arange(8, 16) / 16
+    tmp_patch[::2, 1] = np.arange(4, 12) / 16
+    tmp_patch[1::2, 1] = np.arange(4, 12) / 16
+    ax_mean.add_patch(patches.Polygon(xy=tmp_patch, fill=False, edgecolor=color_patch, lw=lw_patch, zorder=10))  # patch in variance plot
+    # ax_var.add_patch(patches.FancyBboxPatch((test_times[0], train_times[0]), zorder=1,
+    #                                     width=len(test_times), height=len(train_times),
+    #                                    fill=False, edgecolor=color_patch, lw=lw_patch))  # patch in variance plot
     # ax_hist.add_patch(patches.FancyBboxPatch((0, -4),
     #                                 width=0.9, height=16, clip_on=False,
     #                                 fill=False, edgecolor=color_patch, lw=lw_patch)) # box around histogram
@@ -1250,10 +1317,12 @@ def plot_figure_mnm(df_switch, rnn_mnm_folder, save_fig=False, train_times = np.
     ax_mnm = fig.add_subplot(gs_bottom_right[0, 0])
     _ = plot_bar_switch_rnn_types(df_stable_switch=df_switch, neuron_type='n_stable', plottype='cumulative',
                                      rnn_types_list=['prediction_only', 'mnm_acc'], ax=ax_stable,
-                                     label_dict={'prediction_only': 'Prediction only',
-                                                  'mnm_acc': 'Prediction +\nM/NM'})
+                                     label_dict={'prediction_only': 'Pred-only',
+                                                  'mnm_acc': 'Pred &\nM/NM'})
     _ = plot_bar_switch_rnn_types(df_stable_switch=df_switch, neuron_type='n_switch', plottype='cumulative',
-                                     rnn_types_list=['prediction_only', 'mnm_acc'], ax=ax_switch)
+                                     rnn_types_list=['prediction_only', 'mnm_acc'], ax=ax_switch,
+                                     label_dict={'prediction_only': 'Pred-only',
+                                                  'mnm_acc': 'Pred & M/NM'})
     _ = plot_mnm_stsw(df_stable_switch=df_switch, rnn_type='mnm_acc', ax=ax_mnm)
 
     ## Alignment:
