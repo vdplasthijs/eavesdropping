@@ -85,7 +85,7 @@ def find_stable_switch_neurons_activity(forw_mat, diff_th=1, n_tp_sign=2, tt='te
     return (n_stable_neurons, n_switch_neurons), (stable_inds, switch_inds)
 
 def connect_mnm_stsw(rnn, stable_inds=np.array([]), switch_inds=np.array([]),
-                     weight_threshold=0.1, verbose=0):
+                     weight_threshold=0.1, verbose=0, proj_type='threshold'):
     assert rnn.lin_output.out_features > rnn.n_stim, 'this RNN does not have M and NM output neurons'
     assert rnn.lin_output.out_features == 10
     output_ind = {'match': 8, 'nonmatch': 9}  # inds of output neurons
@@ -95,12 +95,21 @@ def connect_mnm_stsw(rnn, stable_inds=np.array([]), switch_inds=np.array([]),
     assert output_weight_mat.shape == (rnn.lin_output.out_features, rnn.n_nodes)
     for key, ind in output_ind.items():  # loop through M and NM
         out_proj = output_weight_mat[ind, :]  #output weights
-        sign_neurons = np.where(np.abs(out_proj) > weight_threshold)[0]  # significant output neurons
-        if verbose > 0:
-            print(f'{key}, sign neurons: {sign_neurons}, neuron types: {st_sw_neurons}')
-        for neuron_type in st_sw_neurons.keys():
-            mutual_neurons = np.intersect1d(sign_neurons, st_sw_neurons[neuron_type])  # find intersection with stablea nd switch indices
-            sign_weight_types[key][neuron_type] = len(mutual_neurons) # save number of such neurons
+
+        if proj_type == 'gradual':
+            for neuron_type, type_inds in st_sw_neurons.items():
+                type_proj = np.abs(out_proj[type_inds])
+                normaliser = np.sum(np.abs(out_proj[np.intersect1d(st_sw_neurons['stable'], st_sw_neurons['switch'])]))
+                if normaliser == 0:
+                    normaliser = 1
+                sign_weight_types[key][neuron_type] = np.sum(type_proj) / normaliser
+        elif proj_type == 'threshold':
+            sign_neurons = np.where(np.abs(out_proj) > weight_threshold)[0]  # significant output neurons
+            if verbose > 0:
+                print(f'{key}, sign neurons: {sign_neurons}, neuron types: {st_sw_neurons}')
+            for neuron_type in st_sw_neurons.keys():
+                mutual_neurons = np.intersect1d(sign_neurons, st_sw_neurons[neuron_type])  # find intersection with stablea nd switch indices
+                sign_weight_types[key][neuron_type] = len(mutual_neurons) # save number of such neurons
     return sign_weight_types
 
 def create_color_mat(x, c):

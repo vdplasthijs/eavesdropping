@@ -134,7 +134,7 @@ def plot_train_test_perf(rnn_model, ax=None, train=True, test=True):
     return ax
 
 def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
-                    plot_top=True, plot_bottom=True, list_top=None, lw=3,
+                    plot_top=True, plot_bottom=True, list_top=None, lw=3, plot_total=True,
                     label_dict_keys = {'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D', 'L1': r'$L_1$',
                                        'MNM': 'M/NM', '0': '0', 'C1': r'$C_1$', 'C2': 'r$C_2$', 'pred': 'total',
                                       '0_postA': '0_A', '0_postB': '0_B', '0_postC': '0_C', '0_postD': '0_D'},
@@ -154,10 +154,12 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
             n_tp = len(rnn.test_loss_split['B'])
             assert n_tp == rnn.info_dict['n_epochs']  # double check and  assume it is the same for all rnns in rnn_folder\
             conv_dict = {key: np.zeros((n_rnn, n_tp)) for key in rnn.test_loss_split.keys()}
-            conv_dict['pred'] = np.zeros((n_rnn, n_tp))
+            if plot_total:
+                conv_dict['pred'] = np.zeros((n_rnn, n_tp))
         for key, arr in rnn.test_loss_split.items():
             conv_dict[key][i_rnn, :] = arr.copy()
-        conv_dict['pred'][i_rnn, :] = np.sum([conv_dict[key][i_rnn, :] for key in ['0', 'B', 'C', 'D']], 0)
+        if plot_total:
+            conv_dict['pred'][i_rnn, :] = np.sum([conv_dict[key][i_rnn, :] for key in ['0', 'B', 'C', 'D']], 0)
 
     i_plot_total = 0
     dict_keys = list(conv_dict.keys())[::-1]
@@ -203,17 +205,18 @@ def plot_split_perf_custom(folder_pred, folder_mnmpred, folder_mnm, ax=None):
     ## prediction only
     _ = plot_split_perf(rnn_folder=folder_pred, list_top=['pred'], lw=3,
                         linestyle_custom_dict={'pred': '-'}, colour_custom_dict={'pred': 'blue'},
-                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': 'Pred performance - (Pred-only networks)'})
+                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': r'$H_{Pred}$' + '    (Pred-only)'})
 
     ## mnm only
     _ = plot_split_perf(rnn_folder=folder_mnm, list_top=['MNM'], lw=5,
                         linestyle_custom_dict={'MNM': '-'}, colour_custom_dict={'MNM': 'green'},
-                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'MNM': 'MNM performance - (MNM-only networks)'})
+                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'MNM': r'$H_{M/NM}$' + '   (MNM-only)'})
 
     ## mnm+ prediction only
     _ = plot_split_perf(rnn_folder=folder_mnmpred, list_top=['pred', 'MNM'], lw=5,
                         linestyle_custom_dict={'pred': ':', 'MNM': '-'}, colour_custom_dict={'pred': 'k', 'MNM': 'k'},
-                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': 'Pred performance - (Pred & MNM networks)', 'MNM': 'MNM performance - (Pred & MNM networks)'})
+                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': r'$H_{Pred}$' + '    (Pred & MNM)',
+                                                                                       'MNM': r'$H_{M/NM}$' + '   (Pred & MNM)'})
 
     ax.legend(frameon=False, bbox_to_anchor=(1.8, 1))
     ax.spines['right'].set_visible(False)
@@ -231,11 +234,11 @@ def plot_decoder_crosstemp_perf(score_matrix, ax=None, ticklabels='', cmap_hm = 
     hm = sns.heatmap(score_matrix, cmap=cmap_hm, xticklabels=ticklabels, cbar=c_bar,
                      yticklabels=ticklabels, ax=ax, vmin=0, vmax=v_max,
                      linewidths=0.1, linecolor='k')
-    ax.invert_yaxis()
+    # ax.invert_yaxis()
     ax.set_yticklabels(rotation=90, labels=ax.get_yticklabels(), fontsize=fontsize_ticks)
     ax.set_xticklabels(rotation=0, labels=ax.get_xticklabels(), fontsize=fontsize_ticks)
     bottom, top = ax.get_ylim()
-    ax.set_ylim(bottom + 0.5, top - 0.5)
+    ax.set_ylim(top - 0.5, bottom + 0.5)
     ax.set_ylabel('Training time ' + r"$\tau$ $\longrightarrow$"); ax.set_xlabel('Testing time t ' + r'$\longrightarrow$')
     ax.set_title('Cross-temporal decoding score\nCorrelated single example', weight='bold');
     if save_fig:
@@ -478,7 +481,7 @@ def plot_arrow_line(x, y, ax=None, c='blue', verbose=False, swap_x=False,
     if verbose:
         print('sens', x_sens.round(2), y_sens.round(2))
         print('mem', x_mem.round(2), y_mem.round(2))
-    traj_width = {True: 6, False: 6}  # T: 3, F: 7
+    traj_width = {True: 5, False: 5}  # T: 3, F: 7
     for ii in range(len(x) - 1): # plot trajectores
         ax.plot(x[ii:(ii + 2)], y[ii:(ii + 2)], c=c_mat[ii, :], linewidth=traj_width[draw_sens_mem], zorder=1)
 #     ax.plot(x, y, color=c_mat)
@@ -656,9 +659,9 @@ def plot_multiple_rnn_properties(rnn_name_dict, rnn_folder, fontsize=10):
     swap_y_dict = {'low': False, 'med': True, 'high': True}
     ax_rast, ax_single, ax_ss, ax_ss_arr, ax_ctmat, ol = {}, {}, {}, {}, {}, {}
     for key, rnn_name in rnn_name_dict.items():
-        with open(rnn_folder + rnn_name, 'rb') as f:
-            rnn[key] = pickle.load(f)
-        _, __, forw  = bp.train_single_decoder_new_data(rnn=rnn[key], ratio_expected=0.5, sparsity_c=0.1)
+        rnn[key] = ru.load_rnn(os.path.join(rnn_folder, rnn_name))
+        _, __, forw  = bp.train_single_decoder_new_data(rnn=rnn[key], ratio_expected=0.5,
+                                                        sparsity_c=0.1, bool_train_decoder=False)
         labels_use_1 = np.array([x[0] == '1' for x in forw['labels_test']])
         labels_use_2 = np.array([x[0] == '2' for x in forw['labels_test']])
 
@@ -786,7 +789,7 @@ def plot_prediction_example(rnn, verbose=1, plot_conv=True):
     labels_train, labels_test = tmp1
     _, __, forward_mat = bp.train_decoder(rnn_model=rnn, x_train=x_train, x_test=x_test,
                                        labels_train=labels_train, labels_test=labels_test,
-                                       save_inplace=False, sparsity_c=0.1, label_name='alpha')  # train decoder just to get forward matrix really
+                                       save_inplace=False, sparsity_c=0.1, label_name='alpha', bool_train_decoder=False)  # train decoder just to get forward matrix really
     forward_mat['labels_train'] = labels_train
     forward_mat['labels_test'] = labels_test
 
@@ -824,7 +827,7 @@ def plot_prediction_example(rnn, verbose=1, plot_conv=True):
         pred_exp[ind][non_eval_times, :] = 0  # set non-clamped time points to 0
 
         ax_gt[ind] = fig.add_subplot(gs[i_ind, 0])  # stimuli
-        plot_example_trial(input_exp[ind], ax=ax_gt[ind], c_map='Greys', print_labels=False,
+        plot_example_trial(input_exp[ind], ax=ax_gt[ind], c_map='bone_r', print_labels=False,
                            c_bar=False, xticklabels=double_time_labels_blank[:-1])
 
         ax_act[ind] = fig.add_subplot(gs[i_ind, 1])  # activity
@@ -833,7 +836,7 @@ def plot_prediction_example(rnn, verbose=1, plot_conv=True):
         ax_act[ind].set_yticklabels(rotation=0, labels=ax_act[ind].get_yticklabels())
 
         ax_pred[ind] = fig.add_subplot(gs[i_ind, 2])  # predictions
-        plot_example_trial(pred_exp[ind], ax=ax_pred[ind], c_map='Greys', print_labels=False, c_bar=False)
+        plot_example_trial(pred_exp[ind], ax=ax_pred[ind], c_map='bone_r', print_labels=False, c_bar=False)
 
         ## C highlight:
         # for ax in [ax_pred[ind], ax_gt[ind]]:
@@ -915,7 +918,7 @@ def plot_convergence_stats(ax_left=None, ax_middle=None, ax_right=None,
 
     ax_left, _ = plot_network_size(rnn_folder=networksize_folder, ax=ax_left)
     _ = plot_split_perf(rnn_folder=splitloss_folder,
-                        ax_top=ax_middle, ax_bottom=ax_right)
+                        ax_top=ax_middle, ax_bottom=ax_right, plot_total=False)
     xtick_arr = np.arange(start=0, step=25, stop=101)
     for ax in [ax_middle, ax_right]:  # change xticklabels because we use 200 sample epochs instead of default 1000
         ax.set_xticks(xtick_arr)
@@ -928,14 +931,13 @@ def plot_convergence_stats(ax_left=None, ax_middle=None, ax_right=None,
     return (ax_right, ax_middle, ax_left)
 
 def plot_distr_networks(rnn_name_dict, rnn_folder='models/75-25_100models/', verbose=0,
-                        train_times = np.arange(8, 11),
-                        test_times = np.arange(6, 8), fontsize=10):
+                        fontsize=10):
 
     rnn_title_dict = {'low': 'Anti-correlated', 'med': 'Decorrelated',
                       'high': 'Correlated'}
 
     fig = plt.figure(constrained_layout=False)
-    gs_top = fig.add_gridspec(ncols=3, nrows=1, width_ratios=[1, 1, 1], bottom=0.7, top=1, wspace=0.45, right=0.6)  # [1, 2.2, 1.2]
+    gs_top = fig.add_gridspec(ncols=3, nrows=1, width_ratios=[1, 1, 1.1], bottom=0.7, top=1, wspace=0.45, right=0.6)  # [1, 2.2, 1.2]
     gs_right_top = fig.add_gridspec(ncols=1, nrows=2, left=0.72, top=1, bottom=0.5, hspace=0.9)
     gs_right_bottom = fig.add_gridspec(ncols=1, nrows=1, left=0.72, top=0.27, bottom=0, hspace=0.9)
     gs_bottom = fig.add_gridspec(ncols=2, nrows=1, bottom=0, top=0.43, wspace=0.45, hspace=0.4, right=0.6)
@@ -949,23 +951,33 @@ def plot_distr_networks(rnn_name_dict, rnn_folder='models/75-25_100models/', ver
         ax_ctmat[key] = fig.add_subplot(gs_top[i_rnn])
         _, hm = plot_decoder_crosstemp_perf(score_matrix=rnn[key].decoding_crosstemp_score['alpha'],
                                ax=ax_ctmat[key], c_bar=False, fontsize_ticks=8,
-                               ticklabels=double_time_labels_blank[:-1])
+                               ticklabels=double_time_labels_blank[:-1], v_max=1)
         ax_ctmat[key].set_title(rnn_title_dict[key])#, weight='bold')
 
         # ax_ctmat[key].set_ylabel('v) cross-temporal \ndecoding accuracy', weight='bold')
         i_rnn += 1
+
+    ## Custom color bar:
+    divider = make_axes_locatable(ax_ctmat['low'])
+    cax_top = divider.append_axes('right', size='5%', pad=0.1)
+    mpl_colorbar(ax_ctmat['low'].get_children()[0], cax=cax_top)
+    cax_top.yaxis.set_ticks_position('right')
+    # cax_mean.yaxis.set_ticks(np.linspace(0, 1, 6))
+    for tick in cax_top.yaxis.get_major_ticks():
+        tick.label.set_fontsize('small')
 
 
     agg_score_alpha = bp.aggregate_score_mats(model_folder=rnn_folder, label='alpha')
     agg_score_beta = bp.aggregate_score_mats(model_folder=rnn_folder, label='beta')
     if verbose:
         print(f'shape agg: {agg_score_alpha.shape}')
-        print(f'train times: {train_times}, test times: {test_times}')
     train_times, test_times = ru.get_train_test_diag()
     summ_accuracy = agg_score_alpha[:, train_times, test_times] # .mean((1, 2))  # average of patch
-    print(summ_accuracy.shape)
+    if verbose:
+        print(summ_accuracy.shape)
     summ_accuracy = np.mean(np.squeeze(summ_accuracy), 1)
-    print(summ_accuracy.shape)
+    if verbose:
+        print(summ_accuracy.shape)
     alpha_diag = np.diag(agg_score_alpha.mean(0))
     beta_diag = np.diag(agg_score_beta.mean(0))
     alpha_diag_err = np.diag(agg_score_alpha.std(0))
@@ -977,12 +989,12 @@ def plot_distr_networks(rnn_name_dict, rnn_folder='models/75-25_100models/', ver
     ax_mean.set_title('Average ' + r'$\alpha$' + ' accuracy')#, weight='bold')
     ## Custom color bar:
     divider = make_axes_locatable(ax_mean)
-    cax_mean = divider.append_axes('right', size='5%', pad=0.05)
+    cax_mean = divider.append_axes('right', size='5%', pad=0.1)
     mpl_colorbar(ax_mean.get_children()[0], cax=cax_mean)
     cax_mean.yaxis.set_ticks_position('right')
     # cax_mean.yaxis.set_ticks(np.linspace(0, 1, 6))
     for tick in cax_mean.yaxis.get_major_ticks():
-        tick.label.set_fontsize('x-small')
+        tick.label.set_fontsize('small')
 
     ax_var = fig.add_subplot(gs_bottom[:, 1])  # variance matrix
     plot_decoder_crosstemp_perf(score_matrix=agg_score_alpha.var(0), cmap_hm='bone_r', c_bar=False,
@@ -990,12 +1002,12 @@ def plot_distr_networks(rnn_name_dict, rnn_folder='models/75-25_100models/', ver
     ax_var.set_title('Variance ' + r'$\alpha$' + ' accuracy')#, weight='bold')
     ## custom color bars:
     divider = make_axes_locatable(ax_var)
-    cax_var = divider.append_axes('right', size='5%', pad=0.05)
+    cax_var = divider.append_axes('right', size='5%', pad=0.1)
     mpl_colorbar(ax_var.get_children()[0], cax=cax_var)
     cax_var.yaxis.set_ticks_position('right')
     # cax_var.yaxis.set_ticks(np.linspace(0, 1, 6))
     for tick in cax_var.yaxis.get_major_ticks():
-        tick.label.set_fontsize('x-small')
+        tick.label.set_fontsize('small')
 
     ax_auto = {0: fig.add_subplot(gs_right_top[0, 0]), 1: fig.add_subplot(gs_right_top[1, 0])}  # alpha and beta auto-decoding
     _  = plot_alpha_beta_performance(alpha_perf=alpha_diag, beta_perf=None, ax=ax_auto[0])
@@ -1011,7 +1023,8 @@ def plot_distr_networks(rnn_name_dict, rnn_folder='models/75-25_100models/', ver
     ax_hist.set_xlabel('Average accuracy')
     ax_hist.set_ylabel('Frequency');
     # ax_hist.set_title('Histogram of patch', weight='bold')
-    print(summ_accuracy)
+    if verbose:
+        print(summ_accuracy)
     n, bins, hist_patches = ax_hist.hist(summ_accuracy, color='k', bins=np.linspace(0, 1, 21),
                                          rwidth=0.9, alpha=0.9)
     ## Colour hist bars: https://stackoverflow.com/questions/23061657/plot-histogram-with-colors-taken-from-colormap
@@ -1063,9 +1076,9 @@ def plot_distr_networks(rnn_name_dict, rnn_folder='models/75-25_100models/', ver
                           fontdict={'fontsize': fontsize,  'weight': 'bold'})
     ax_ctmat['high'].text(s='B) Distribution of cross-temporal '+ r'$\mathbf{\alpha}$' + '-decoding accuracy', x=-5.75, y=-8.8,
                           fontdict={'fontsize': fontsize,  'weight': 'bold'})
-    ax_ctmat['high'].text(s='C) Auto-temporal accuracy', x=75, y=20,
+    ax_ctmat['high'].text(s='C) Auto-temporal accuracy', x=78.7, y=20,  # x=81
                           fontdict={'fontsize': fontsize,  'weight': 'bold'})
-    ax_ctmat['high'].text(s='D) Histogram of red regime', x=75, y=-18.5,
+    ax_ctmat['high'].text(s='D) Histogram of red regime', x=78.7, y=-18.5,
                           fontdict={'fontsize': fontsize, 'weight': 'bold'})
 
     return None
@@ -1135,8 +1148,11 @@ def plot_bar_switch_rnn_types(df_stable_switch, plottype='bar', ax=None, neuron_
     ax.spines['right'].set_visible(False)
 
     if plottype == 'cumulative':  # perform kilmogorov smirnov test
-        _, p_val = scipy.stats.ks_2samp(np.concatenate((np.array([0]), np.cumsum(df_switch_summary[rnn_types_list[0]]))),
-                                        np.concatenate((np.array([0]), np.cumsum(df_switch_summary[rnn_types_list[1]]))))
+        # _, p_val = scipy.stats.ks_2samp(np.concatenate((np.array([0]), np.cumsum(df_switch_summary[rnn_types_list[0]]))),
+        #                                 np.concatenate((np.array([0]), np.cumsum(df_switch_summary[rnn_types_list[1]]))))
+        _, p_val = scipy.stats.mannwhitneyu(df_switch_summary[rnn_types_list[0]],
+                                            df_switch_summary[rnn_types_list[1]],
+                                            alternative='two-sided')
         print(p_val)
         ax.set_ylabel('Fraction of runs')
     else:
@@ -1165,6 +1181,7 @@ def plot_mnm_stsw(df_stable_switch, ax=None, ax_nonmatch=None, rnn_type='mnm_acc
     n_rows = 4 * len(df_use)  # split m and nm and st/sw
     df_plot = pd.DataFrame({**{x: np.zeros(n_rows, dtype='object') for x in ['mnm', 'stsw']},
                             **{x: np.zeros(n_rows) for x in ['count']}})
+    save_arrs_dict = {x: np.zeros(len(df_use)) for x in ['m_st', 'nm_st', 'm_sw', 'nm_sw']}
     for i_rnn in range(len(df_use)):
         i_1 = 4 * i_rnn
         i_2 = 4 * i_rnn + 1
@@ -1178,10 +1195,18 @@ def plot_mnm_stsw(df_stable_switch, ax=None, ax_nonmatch=None, rnn_type='mnm_acc
         df_plot['stsw'].iat[i_2] = 'Stable'
         df_plot['stsw'].iat[i_3] = 'Switch'
         df_plot['stsw'].iat[i_4] = 'Switch'
-        df_plot['count'].iat[i_1] = df_use['n_m_st'].iat[i_rnn]
-        df_plot['count'].iat[i_2] = df_use['n_nm_st'].iat[i_rnn]
-        df_plot['count'].iat[i_3] = df_use['n_m_sw'].iat[i_rnn]
-        df_plot['count'].iat[i_4] = df_use['n_nm_sw'].iat[i_rnn]
+        m_total = np.maximum(df_use['n_m_st'].iat[i_rnn] + df_use['n_m_sw'].iat[i_rnn], 1)  # total number of projections going to match neuron
+        nm_total = np.maximum(df_use['n_nm_st'].iat[i_rnn] + df_use['n_nm_sw'].iat[i_rnn], 1)
+        st_total = np.maximum(df_use['n_stable'].iat[i_rnn], 1)  # total number of stable neurons (not necessarily going to either M or NM)
+        sw_total = np.maximum(df_use['n_switch'].iat[i_rnn], 1)
+        df_plot['count'].iat[i_1] = df_use['n_m_st'].iat[i_rnn] / (st_total * m_total)
+        df_plot['count'].iat[i_2] = df_use['n_nm_st'].iat[i_rnn] / (st_total * nm_total)
+        df_plot['count'].iat[i_3] = df_use['n_m_sw'].iat[i_rnn] / (sw_total * m_total)
+        df_plot['count'].iat[i_4] = df_use['n_nm_sw'].iat[i_rnn] / (sw_total * nm_total)
+        save_arrs_dict['m_st'][i_rnn] = df_plot['count'].iat[i_1]
+        save_arrs_dict['nm_st'][i_rnn] = df_plot['count'].iat[i_2]
+        save_arrs_dict['m_sw'][i_rnn] = df_plot['count'].iat[i_3]
+        save_arrs_dict['nm_sw'][i_rnn] = df_plot['count'].iat[i_4]
     # sns.violinplot(data=df_plot, x='stsw', y='count', hue='mnm', ax=ax, split=True)
     # sns.pointplot(data=df_plot, x='stsw', y='count', hue='mnm', ax=ax, split=True)
     # p_val = {key: scipy.stats.wilcoxon(df_use[f'n_{short}_st'], df_use[f'n_{short}_sw'],
@@ -1191,14 +1216,24 @@ def plot_mnm_stsw(df_stable_switch, ax=None, ax_nonmatch=None, rnn_type='mnm_acc
                     (68 / 256, 190 / 256, 212 / 256)]  # switch
     sns.pointplot(data=df_plot, hue='stsw', y='count', x='mnm', ax=ax,
                   split=True, palette=stsw_colours)
-    p_val = {key: scipy.stats.wilcoxon(df_use[f'n_m_{short}'], df_use[f'n_nm_{short}'],
-                                           alternative='two-sided')[1] for key, short in stsw_names.items()}
+    # p_val = {key: scipy.stats.wilcoxon(df_use[f'n_m_{short}'], df_use[f'n_nm_{short}'],
+    #                                        alternative='two-sided')[1] for key, short in stsw_names.items()}
+    p_val = {key: scipy.stats.wilcoxon(save_arrs_dict[f'm_{short}'], save_arrs_dict[f'nm_{short}'],
+                                       alternative='two-sided')[1] for key, short in stsw_names.items()}
+    p_val['nm'] = scipy.stats.wilcoxon(save_arrs_dict['nm_st'], save_arrs_dict['nm_sw'],
+                                       alternative='two-sided')[1]
+    p_val['m'] = scipy.stats.wilcoxon(save_arrs_dict['m_st'], save_arrs_dict['m_sw'],
+                                       alternative='two-sided')[1]
+
     print(p_val)
-    ax.text(s=f'P = {np.round(p_val["stable"], 8)}', x=0.27, y=5.3,
+    ax.text(s=f'P = {np.round(p_val["stable"], 3)}', x=0.2, y=0.064,
                   c=stsw_colours[0], fontdict={'weight': 'bold'})
-    ax.text(s=f'P = {np.round(p_val["switch"], 3)}', x=0.27, y=2.5,
+    ax.text(s=f'P = {np.round(p_val["switch"], 3)}', x=0.24, y=0.095,
                   c=stsw_colours[1], fontdict={'weight': 'bold'})
-    ax.legend(frameon=False, bbox_to_anchor=(0.7, 0.85))
+    ax.text(s=f'P = {np.round(p_val["nm"], 3)}', x=1.07, y=0.078,
+                  c='k', fontdict={'weight': 'bold'})
+    # ax.plot([1.05, 1.05], [np.mean(save_arrs_dict['nm_st']), np.mean(save_arrs_dict['nm_sw'])], c='k', linewidth=3)
+    ax.legend(frameon=False, bbox_to_anchor=(0.75, 1))
     # ax.set_title('Match neurons receive more Stable projections', weight='bold', y=1.05)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -1212,10 +1247,10 @@ def plot_figure_mnm(df_switch, rnn_mnm_folder, save_fig=False, train_times = np.
 
 
     fig = plt.figure(constrained_layout=False)
-    gs_schem = fig.add_gridspec(ncols=1, nrows=1, bottom=0.7, top=1, wspace=0, right=0.6)  # [1, 2.2, 1.2]
-    gs_right_top = fig.add_gridspec(ncols=1, nrows=2, left=0.72, top=0.95, bottom=0.75, hspace=0.7, right=1)
-    gs_middle_mats = fig.add_gridspec(ncols=2, nrows=1, left=0, top=0.6, bottom=0.32, wspace=0.5, right=0.6)
-    gs_middle_right = fig.add_gridspec(ncols=1, nrows=1, bottom=0.37, top=0.57, wspace=0, hspace=0, left=0.72, right=1)
+    gs_schem = fig.add_gridspec(ncols=1, nrows=1, bottom=0.7, top=1, wspace=0, right=0.5)  # [1, 2.2, 1.2]
+    gs_right_top = fig.add_gridspec(ncols=1, nrows=2, left=0.54, top=0.95, bottom=0.75, hspace=0.7, right=0.79)
+    gs_middle_mats = fig.add_gridspec(ncols=2, nrows=1, left=0, top=0.6, bottom=0.34, wspace=0.5, right=0.6)
+    gs_middle_right = fig.add_gridspec(ncols=1, nrows=1, bottom=0.34, top=0.6, wspace=0, hspace=0, left=0.72, right=1)
     gs_bottom = fig.add_gridspec(ncols=2, nrows=1, bottom=0, top=0.2, wspace=0.5, hspace=0, right=0.6, left=0)
     gs_bottom_right = fig.add_gridspec(ncols=1, nrows=1, bottom=0, top=0.2, wspace=0.0, hspace=0, right=1, left=0.72)
 
@@ -1244,11 +1279,11 @@ def plot_figure_mnm(df_switch, rnn_mnm_folder, save_fig=False, train_times = np.
     agg_score_alpha = bp.aggregate_score_mats(model_folder=rnn_mnm_folder, label='alpha')
     ax_mean = fig.add_subplot(gs_middle_mats[0, 0])
     plot_decoder_crosstemp_perf(score_matrix=agg_score_alpha.mean(0), cmap_hm='BrBG', c_bar=False,
-                                   ax=ax_mean, ticklabels=double_time_labels_blank[:-1], v_max=1)
+                                   ax=ax_mean, ticklabels=double_time_labels_blank[:-1], v_max=1, fontsize_ticks=fontsize)
     ax_mean.set_title('Average ' + r'$\alpha$' + ' accuracy')#, weight='bold')
     ## Custom color bar:
     divider = make_axes_locatable(ax_mean)
-    cax_mean = divider.append_axes('right', size='5%', pad=0.05)
+    cax_mean = divider.append_axes('right', size='5%', pad=0.1)
     mpl_colorbar(ax_mean.get_children()[0], cax=cax_mean)
     cax_mean.yaxis.set_ticks_position('right')
     # cax_mean.yaxis.set_ticks(np.linspace(0, 1, 6))
@@ -1257,11 +1292,11 @@ def plot_figure_mnm(df_switch, rnn_mnm_folder, save_fig=False, train_times = np.
 
     ax_var = fig.add_subplot(gs_middle_mats[0, 1])  # variance matrix
     plot_decoder_crosstemp_perf(score_matrix=agg_score_alpha.var(0), cmap_hm='bone_r', c_bar=False,
-                                   ax=ax_var, ticklabels=double_time_labels_blank[:-1], v_max=0.1)
+                                   ax=ax_var, ticklabels=double_time_labels_blank[:-1], v_max=0.1, fontsize_ticks=fontsize)
     ax_var.set_title('Variance ' + r'$\alpha$' + ' accuracy')#, weight='bold')
     ## custom color bars:
     divider = make_axes_locatable(ax_var)
-    cax_var = divider.append_axes('right', size='5%', pad=0.05)
+    cax_var = divider.append_axes('right', size='5%', pad=0.1)
     mpl_colorbar(ax_var.get_children()[0], cax=cax_var)
     cax_var.yaxis.set_ticks_position('right')
     # cax_var.yaxis.set_ticks(np.linspace(0, 1, 6))
@@ -1324,7 +1359,8 @@ def plot_figure_mnm(df_switch, rnn_mnm_folder, save_fig=False, train_times = np.
                                      label_dict={'prediction_only': 'Pred-only',
                                                   'mnm_acc': 'Pred & M/NM'})
     _ = plot_mnm_stsw(df_stable_switch=df_switch, rnn_type='mnm_acc', ax=ax_mnm)
-
+    ax_mnm.tick_params(axis='x', direction='out', pad=21)
+    # print(*ax_mnm.get_xticklabels())
     ## Alignment:
     # for ax in [ax_mean, ax_var, ax_stable, ax_switch, ax_conv_top, ax_hist, ax_mnm]: # align labesl & titles
     #     ax.yaxis.label.set_va('top')  # set ylabel alignment
@@ -1336,16 +1372,16 @@ def plot_figure_mnm(df_switch, rnn_mnm_folder, save_fig=False, train_times = np.
     # cax_bottom.yaxis.set_label_coords(x=7, y=0.5)
 
 
-    fig.align_ylabels([ax_conv_top, ax_hist, ax_mnm])
+    fig.align_ylabels([ax_hist, ax_mnm])
     fig.align_ylabels([ax_mean, ax_switch])
     fig.align_ylabels([ax_var, ax_stable])
-    fig.text(s='A) RNN prediction + Match / Non-match (M/NM) task', x=-0.06, y=1, fontdict={'weight': 'bold'})
-    fig.text(s='B) ' + r'$\it{\bf{H}}$' + ' during training', x=0.66, y=1, fontdict={'weight': 'bold'})
-    fig.text(s='C) Distribution of cross-temporal ' + r'$\mathbf{\alpha}}$' + ' decoding accuracy', x=-0.06, y=0.65, fontdict={'weight': 'bold'})
-    fig.text(s='D) Histogram of red regime', x=0.66, y=0.65, fontdict={'weight': 'bold'})
-    fig.text(s='E) Number of switch neurons', x=-0.06, y=0.23, fontdict={'weight': 'bold'})
-    fig.text(s='F) Number of stable neurons', x=0.30, y=0.23, fontdict={'weight': 'bold'})
-    fig.text(s='G) Match vs Non-match', x=0.66, y=0.23, fontdict={'weight': 'bold'})
+    fig.text(s='A) RNN prediction + Match / Non-match (M/NM) task', x=-0.065, y=1, fontdict={'weight': 'bold'})
+    fig.text(s='B) ' + r'$\it{\bf{H}}$' + ' during training', x=0.48, y=1, fontdict={'weight': 'bold'})
+    fig.text(s='C) Distribution of cross-temporal ' + r'$\mathbf{\alpha}}$' + ' decoding accuracy', x=-0.065, y=0.65, fontdict={'weight': 'bold'})
+    fig.text(s='D) Histogram of red regime', x=0.655, y=0.65, fontdict={'weight': 'bold'})
+    fig.text(s='E) Number of switch neurons', x=-0.065, y=0.24, fontdict={'weight': 'bold'})
+    fig.text(s='F) Number of stable neurons', x=0.305, y=0.24, fontdict={'weight': 'bold'})
+    fig.text(s='G) Match vs Non-match', x=0.655, y=0.24, fontdict={'weight': 'bold'})
 
     if save_fig:
         plt.savefig('figures/thesis/fig5_python.svg', bbox_to_inches='tight')

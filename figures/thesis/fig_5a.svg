@@ -9,9 +9,9 @@
    xmlns="http://www.w3.org/2000/svg"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-   width="124.75521mm"
+   width="140.32162mm"
    height="62.747791mm"
-   viewBox="0 0 124.75521 62.747791"
+   viewBox="0 0 140.32162 62.747791"
    version="1.1"
    id="svg5442"
    inkscape:version="0.92.3 (2405546, 2018-03-11)"
@@ -342,8 +342,8 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="2"
-     inkscape:cx="310.06468"
-     inkscape:cy="140.42703"
+     inkscape:cx="230.75894"
+     inkscape:cy="92.134527"
      inkscape:document-units="mm"
      inkscape:current-layer="layer1"
      showgrid="false"
@@ -364,7 +364,7 @@
         <dc:format>image/svg+xml</dc:format>
         <dc:type
            rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
-        <dc:title />
+        <dc:title></dc:title>
       </cc:Work>
     </rdf:RDF>
   </metadata>
@@ -1087,14 +1087,19 @@
          xml:space="preserve"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:4.96264505px;line-height:1;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.1101119;stroke-linecap:butt;stroke-linejoin:round"
          x="172.55937"
-         y="53.263786"
+         y="53.063869"
          id="text183041-4-7-7-4-8-9"
          mask="none"><tspan
            sodipodi:role="line"
            id="tspan183039-0-8-8-5-8-3"
            x="172.55937"
-           y="53.263786"
-           style="font-size:4.96264505px;stroke-width:0.1101119;stroke-linecap:butt;stroke-linejoin:round">M</tspan></text>
+           y="53.063869"
+           style="font-size:4.96264505px;stroke-width:0.1101119;stroke-linecap:butt;stroke-linejoin:round">M   (α=β)</tspan><tspan
+           sodipodi:role="line"
+           x="172.55937"
+           y="58.026516"
+           style="font-size:4.96264505px;stroke-width:0.1101119;stroke-linecap:butt;stroke-linejoin:round"
+           id="tspan1217" /></text>
     </g>
     <g
        id="g27342"
@@ -1110,14 +1115,14 @@
          xml:space="preserve"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:4.96264505px;line-height:1;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.1101119;stroke-linecap:butt;stroke-linejoin:round"
          x="172.55937"
-         y="58.60096"
+         y="58.700493"
          id="text183041-4-7-7-4-8-6"
          mask="none"><tspan
            sodipodi:role="line"
            id="tspan183039-0-8-8-5-8-0"
            x="172.55937"
-           y="58.60096"
-           style="font-size:4.96264505px;stroke-width:0.1101119;stroke-linecap:butt;stroke-linejoin:round">NM</tspan></text>
+           y="58.700493"
+           style="font-size:4.96264505px;stroke-width:0.1101119;stroke-linecap:butt;stroke-linejoin:round">NM </tspan></text>
     </g>
     <g
        id="g1221">
@@ -1157,8 +1162,19 @@
        sodipodi:nodetypes="cc"
        inkscape:connector-curvature="0"
        id="path4146-0-2-3-47-7-0-2-6-5-6"
-       d="m 166.41143,61.401189 c -3.72866,5.356868 6.40593,5.18715 2.28362,0.02694"
-       style="fill:none;stroke:#cf8f17;stroke-width:0.6305365;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1;marker-start:url(#TriangleInM-7-5-5-8-3-9-7-8-5-6);fill-opacity:1"
+       d="m 161.51664,59.019939 c -7.71893,9.658116 19.8467,9.336171 10.35341,-0.899102"
+       style="fill:none;fill-opacity:1;stroke:#cf8f17;stroke-width:0.6305365;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1;marker-start:url(#TriangleInM-7-5-5-8-3-9-7-8-5-6)"
        mask="none" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:4.93888855px;line-height:1;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.26458332"
+       x="182.67735"
+       y="58.26981"
+       id="text8856"><tspan
+         sodipodi:role="line"
+         id="tspan8854"
+         x="182.67735"
+         y="58.26981"
+         style="stroke-width:0.26458332">(α≠β)</tspan></text>
   </g>
 </svg>
