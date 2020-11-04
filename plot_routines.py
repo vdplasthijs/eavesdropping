@@ -203,18 +203,20 @@ def plot_split_perf_custom(folder_pred, folder_mnmpred, folder_mnm, ax=None):
         ax = plt.subplot(111)
 
     ## prediction only
-    _ = plot_split_perf(rnn_folder=folder_pred, list_top=['pred'], lw=3,
-                        linestyle_custom_dict={'pred': '-'}, colour_custom_dict={'pred': 'blue'},
+    _ = plot_split_perf(rnn_folder=folder_pred, list_top=['pred'], lw=5,
+                        linestyle_custom_dict={'pred': '-'}, colour_custom_dict={'pred': [67 / 255, 0, 0]},
                         ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': r'$H_{Pred}$' + '    (Pred-only)'})
 
     ## mnm only
     _ = plot_split_perf(rnn_folder=folder_mnm, list_top=['MNM'], lw=5,
-                        linestyle_custom_dict={'MNM': '-'}, colour_custom_dict={'MNM': 'green'},
+                        linestyle_custom_dict={'MNM': '-'}, colour_custom_dict={'MNM': [207 / 255, 143 / 255, 23 / 255]},
                         ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'MNM': r'$H_{M/NM}$' + '   (MNM-only)'})
 
     ## mnm+ prediction only
+    colour_comb = [73 / 255, 154 / 255, 215 / 255]
     _ = plot_split_perf(rnn_folder=folder_mnmpred, list_top=['pred', 'MNM'], lw=5,
-                        linestyle_custom_dict={'pred': ':', 'MNM': '-'}, colour_custom_dict={'pred': 'k', 'MNM': 'k'},
+                        linestyle_custom_dict={'pred': ':', 'MNM': '-'},
+                        colour_custom_dict={'pred': colour_comb, 'MNM': colour_comb},
                         ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': r'$H_{Pred}$' + '    (Pred & MNM)',
                                                                                        'MNM': r'$H_{M/NM}$' + '   (Pred & MNM)'})
 
