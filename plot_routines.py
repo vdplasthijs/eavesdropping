@@ -247,24 +247,30 @@ def plot_decoder_crosstemp_perf(score_matrix, ax=None, ticklabels='', cmap_hm = 
         plt.savefig(fig_name, bbox_inches='tight')
     return (ax, hm)
 
-def plot_raster_trial_average(forw, ax=None, save_fig=False, reverse_order=False, c_bar=True,
-                              fig_name='figures/example_high_forward_difference.pdf'):
-    labels_use_1 = np.array([x[0] == '1' for x in forw['labels_train']])
-    labels_use_2 = np.array([x[0] == '2' for x in forw['labels_train']])
+def plot_raster_trial_average(forw, ax=None, save_fig=False, reverse_order=False, c_bar=True, ol=None,
+                              fig_name='figures/example_high_forward_difference.pdf', index_label=0, plot_mnm=False):
+    if plot_mnm:
+        labels_use_1 = np.array([x == '11' or x == '22' for x in forw['labels_train']])  # expected / match
+        labels_use_2 = np.array([x == '21' or x == '12' for x in forw['labels_train']])  # unexpected / non match
+        plot_cmap = 'RdGy'
+    else:
+        labels_use_1 = np.array([x[index_label] == '1' for x in forw['labels_train']])
+        labels_use_2 = np.array([x[index_label] == '2' for x in forw['labels_train']])
+        plot_cmap = 'PiYG'
     if ax is None:
         ax = plt.subplot(111)
 
     plot_diff = (forw['train'][labels_use_1, :, :].mean(0) - forw['train'][labels_use_2, :, :].mean(0))
-    ol = opt_leaf(plot_diff, dim=1)  # optimal leaf sorting
+    if ol is None:
+        ol = opt_leaf(plot_diff, dim=1)  # optimal leaf sorting
     if reverse_order:
         ol = ol[::-1]
-    # ol = np.argsort(plot_diff.sum(0))
     # rev_ol = np.zeros_like(ol) # make reverse mapping of OL
     # for i_ol, el_ol in enumerate(ol):
     #     rev_ol[el_ol] = i_ol
     plot_diff = plot_diff[:, ol]
     th = np.max(np.abs(plot_diff)) # threshold for visualisation
-    sns.heatmap(plot_diff.T, cmap='PiYG', vmin=-1 * th, vmax=th, ax=ax,
+    sns.heatmap(plot_diff.T, cmap=plot_cmap, vmin=-1 * th, vmax=th, ax=ax,
                      xticklabels=double_time_labels_blank[:-1], cbar=c_bar)
     ax.invert_yaxis()
     ax.set_yticklabels(rotation=0, labels=ax.get_yticklabels())

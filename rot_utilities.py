@@ -34,6 +34,35 @@ def angle_vecs(v1, v2):
     deg = rad * 360 / (2 * np.pi)
     return deg
 
+
+def angle_sensory_memory(forw,  ol=None):
+
+    ind_sens_alpha_1 = np.array([x[0] == '1' for x in forw['labels_train']])  # alpha == 1
+    ind_sens_alpha_2 = np.array([x[0] == '2' for x in forw['labels_train']])  # alpha == 2
+
+    ind_sens_beta_1 = np.array([x[1] == '1' for x in forw['labels_train']])  # beta == 1
+    ind_sens_beta_2 = np.array([x[1] == '2' for x in forw['labels_train']])  # beta == 2
+
+    plot_diff_sens_alpha = (forw['train'][ind_sens_alpha_1, :, :].mean(0) -
+                            forw['train'][ind_sens_alpha_2, :, :].mean(0))
+
+    plot_diff_sens_beta = (forw['train'][ind_sens_beta_1, :, :].mean(0) -
+                           forw['train'][ind_sens_beta_2, :, :].mean(0))
+
+    if ol is None:
+        # ol = opt_leaf(plot_diff_sens_alpha, dim=1)  # optimal leaf sorting
+        ol = np.arange(plot_diff_sens_alpha.shape[1])
+    plot_diff_sens_alpha = plot_diff_sens_alpha[:, ol]
+    plot_diff_sens_beta = plot_diff_sens_beta[:, ol]
+
+    n_timepoints = plot_diff_sens_beta.shape[0]
+    angle_alpha_beta = np.array([angle_vecs(v1=plot_diff_sens_alpha[t, :],
+                                            v2=plot_diff_sens_beta[t, :]) for t in range(n_timepoints)])
+
+    av_alpha_act = np.sum(plot_diff_sens_alpha, 0)
+    av_beta_act = np.sum(plot_diff_sens_beta, 0)
+    return angle_alpha_beta, (av_alpha_act, av_beta_act)
+
 def find_max_or_min(array, dimension=0):
     assert array.ndim == 2
 
