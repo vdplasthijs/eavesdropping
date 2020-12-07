@@ -256,6 +256,13 @@ def plot_raster_trial_average(forw, ax=None, save_fig=False, reverse_order=False
     else:
         labels_use_1 = np.array([x[index_label] == '1' for x in forw['labels_train']])
         labels_use_2 = np.array([x[index_label] == '2' for x in forw['labels_train']])
+        # if index_label == 0:
+        #     labels_use_1 = np.array([x == '11' for x in forw['labels_train']])
+        #     labels_use_2 = np.array([x == '12' for x in forw['labels_train']])
+        # elif index_label == 1:
+        #     labels_use_1 = np.array([x == '22' for x in forw['labels_train']])
+        #     labels_use_2 = np.array([x == '21' for x in forw['labels_train']])
+
         plot_cmap = 'PiYG'
     if ax is None:
         ax = plt.subplot(111)
