@@ -319,7 +319,8 @@ def compute_full_pred(xdata, model, mnm=False):
     return full_pred
 
 def bptt_training(rnn, optimiser, dict_training_params,
-                  x_train, x_test, y_train, y_test, labels_train=None, labels_test=None, verbose=1):
+                  x_train, x_test, y_train, y_test, labels_train=None,
+                  labels_test=None, verbose=1, mnm_only=True):
     '''Training algorithm for backpropagation through time, given a RNN model, optimiser,
     dictionary with training parameters and train and test data. RNN is NOT reset,
     so continuation training is possible. Training can be aborted prematurely by Ctrl+C,
@@ -358,7 +359,7 @@ def bptt_training(rnn, optimiser, dict_training_params,
                 for xb, yb in train_dl:  # returns torch(n_bs x n_times x n_freq)
                     curr_label = labels_train[it_train]  # this works if batch size == 1
                     full_pred = compute_full_pred(model=rnn, xdata=xb)  # predict time trace
-                    loss, _ = tau_loss(y_est=full_pred, y_true=yb, model=rnn, mnm_only=True,
+                    loss, _ = tau_loss(y_est=full_pred, y_true=yb, model=rnn, mnm_only=mnm_only,
                                     reg_param=dict_training_params['l1_param'], match_times=[13, 14], # dict_training_params['eval_times'],  #
                                     tau_array=dict_training_params['eval_times'], label=curr_label)  # compute loss
                     loss.backward()  # compute gradients
@@ -370,7 +371,7 @@ def bptt_training(rnn, optimiser, dict_training_params,
                 with torch.no_grad():  # to be sure
                     ## Compute losses for saving:
                     full_pred = compute_full_pred(model=rnn, xdata=x_train)
-                    train_loss, _ = tau_loss(y_est=full_pred, y_true=y_train, model=rnn, mnm_only=True,
+                    train_loss, _ = tau_loss(y_est=full_pred, y_true=y_train, model=rnn, mnm_only=mnm_only,
                                           reg_param=dict_training_params['l1_param'], match_times=[13, 14], #dict_training_params['eval_times'],  #
                                           tau_array=dict_training_params['eval_times'], label=labels_train)
                     rnn.train_loss_arr.append(float(train_loss.detach().numpy()))
@@ -380,7 +381,7 @@ def bptt_training(rnn, optimiser, dict_training_params,
                                                   reg_param=dict_training_params['l1_param'],
                                                   tau_array=dict_training_params['eval_times'],
                                                   return_ratio_ce=True, match_times=[13, 14],  # dict_training_params['eval_times'], #
-                                                  label=labels_test, mnm_only=True)
+                                                  label=labels_test, mnm_only=mnm_only)
                     rnn.test_loss_arr.append(float(test_loss.detach().numpy()))
                     rnn.test_loss_ratio_ce.append(float(ratio.detach().numpy()))
 
@@ -473,7 +474,12 @@ def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
         return None, None, forw_mat
 
 def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/',
-                        mnm=False, accumulate=False):
+                        mnm=False, accumulate=False, mnm_only=True):
+    if mnm_only:
+        assert mnm
+        print('MNM ONLY !!')
+    else:
+        print('MNM + prediction task')
     try:
         for nn in range(n_simulations):
             print(f'\n-----------\nsimulation {nn}/{n_simulations}')
@@ -500,7 +506,8 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/',
             ## Train with BPTT
             rnn = bptt_training(rnn=rnn, optimiser=opt, dict_training_params=t_dict,
                                 x_train=x_train, x_test=x_test, y_train=y_train, y_test=y_test,
-                                labels_train=labels_train, labels_test=labels_test, verbose=0)
+                                labels_train=labels_train, labels_test=labels_test, verbose=0,
+                                mnm_only=mnm_only)
 
             ## Decode cross temporally
             score_mat, decoder_dict, _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
