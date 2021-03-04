@@ -234,8 +234,10 @@ class RNN_MNM(RNN):
             print(f'RNN-MNM model saved as {self.file_name}')
 
 def tau_loss(y_est, y_true, tau_array=np.array([2, 3]), label=None, match_times=[13, 14],
-             model=None, reg_param=0.001, mnm_loss_separate=False, mnm_only=True):
+             model=None, reg_param=0.001, mnm_loss_separate=False, mnm_only=True,
+             simulated_annealing=False, factor_sa_pred=0):
     '''Compute Cross Entropy of given time array tau_array, and add L1 regularisation.'''
+    assert not (simulated_annealing and mnm_only), f'cannot do mnm only and SA simultaneously. sa = {simulated_annealing}, mnm = {mnm_only}'
     y_est_trunc = y_est[:, tau_array, :model.n_stim]  # only evaluated these time points, cut off at N_stim, because for M and NM these follow after
     y_true_trunc = y_true[:, tau_array, :]
     n_samples = y_true.shape[0]
@@ -270,6 +272,8 @@ def tau_loss(y_est, y_true, tau_array=np.array([2, 3]), label=None, match_times=
         ce_match = 0
     if mnm_only:
         total_loss = reg_loss + ce_match  #  + ce
+    # elif simulated_annealing:
+    #     total_loss = reg_loss + ce_match + factor_sa_pred * ce
     else:
         total_loss = reg_loss + ce_match  + ce
     return total_loss, (ce, reg_loss, ce_match)
@@ -278,7 +282,8 @@ def split_loss(y_est, y_true, tau_array=np.array([2, 3]), label=None, match_time
                time_prediction_array_dict={'B': [5, 6], 'C': [9, 10], 'C1': [9], 'C2': [10], 'D': [13, 14],
                                            '0': [4, 7, 8, 11, 12, 15, 16], '0_postA': [4],
                                            '0_postB': [7, 8], '0_postC': [11, 12], '0_postD': [15, 16]},
-               model=None, reg_param=0.001, return_ratio_ce=False, mnm_only=True):
+               model=None, reg_param=0.001, return_ratio_ce=False, mnm_only=True,
+               simulated_annealing=False, factor_sa_pred=1):
     '''Compute Cross Entropy for each given time array, and L1 regularisation.'''
     assert model is not None
     for key, tau_array in time_prediction_array_dict.items():  # compute separate times separately
@@ -290,10 +295,12 @@ def split_loss(y_est, y_true, tau_array=np.array([2, 3]), label=None, match_time
 
     total_loss, (ce, reg_loss, ce_match) = tau_loss(y_est=y_est, y_true=y_true, model=model, label=label,
                                                     reg_param=reg_param, match_times=match_times,
-                                                    tau_array=tau_array)  # compute three loss terms
+                                                    tau_array=tau_array, mnm_only=mnm_only,
+                                                    simulated_annealing=simulated_annealing, factor_sa_pred=factor_sa_pred)  # compute three loss terms
 
     model.test_loss_split['L1'].append(float(reg_loss.detach().numpy()))  # add to array
-    model.test_loss_split['MNM'].append(float(ce_match.detach().numpy()))
+    if 'MNM' in model.test_loss_split.keys():  # only if MNM task is included 
+        model.test_loss_split['MNM'].append(float(ce_match.detach().numpy()))
     if mnm_only:
         total_loss = reg_loss + ce_match
     if return_ratio_ce is False:
@@ -407,6 +414,122 @@ def bptt_training(rnn, optimiser, dict_training_params,
             print(f'Training ended prematurely by user at epoch {epoch}.\nResults saved in RNN Class.')
         return rnn
 
+def bptt_training_sa(rnn, optimiser, dict_training_params,
+                    dict_data_params, verbose=1, mnm_only=True):
+    '''Training algorithm for backpropagation through time, given a RNN model, optimiser,
+    dictionary with training parameters and train and test data. RNN is NOT reset,
+    so continuation training is possible. Training can be aborted prematurely by Ctrl+C,
+    and it will terminate correctly.'''
+    assert dict_training_params['bs'] == 1, 'batch size is not 1; this error is thrown because for MNM we assume it is 1 to let labels correspond to dataloadre loop'
+    assert mnm_only is False
+    prev_loss = 10  # init loss for convergence
+    if 'trained_epochs' not in rnn.info_dict.keys():
+        rnn.info_dict['trained_epochs'] = 0
+
+    ## Training procedure
+    init_str = f'Initialising training; start at epoch {rnn.info_dict["trained_epochs"]}'
+    epochs_per_stage = dict_training_params['n_epochs']
+    total_epochs = 4 * epochs_per_stage  # 0, build iup, build down, 0
+    ratio_exp_array = np.zeros(total_epochs)
+    # ratio_exp_array[:int(0.25 * total_epochs)] = 0.5
+    # ratio_exp_array[int(0.25 * total_epochs):int(0.5 * total_epochs)] = np.linspace(0.5, dict_data_params['ratio_exp'], int(0.25 * total_epochs) + 1)[:-1]
+    # ratio_exp_array[int(0.5 * total_epochs):int(0.75 * total_epochs)] = np.linspace(dict_data_params['ratio_exp'], 0.5, int(0.25 * total_epochs) + 1)[:-1]
+    # ratio_exp_array[int(0.75 * total_epochs):] = 0.5
+    ratio_exp_array[:int(0.2 * total_epochs)] = 0.5
+    ratio_exp_array[int(0.2 * total_epochs):int(0.4 * total_epochs)] = np.linspace(0.5, dict_data_params['ratio_exp'], int(0.2 * total_epochs) + 1)[:-1]
+    ratio_exp_array[int(0.4 * total_epochs):int(0.6 * total_epochs)] = dict_data_params['ratio_exp']
+    ratio_exp_array[int(0.6 * total_epochs):int(0.8 * total_epochs)] = np.linspace(dict_data_params['ratio_exp'], 0.5, int(0.2 * total_epochs) + 1)[:-1]
+    ratio_exp_array[int(0.8 * total_epochs):] = 0.5
+    rnn.info_dict['ratio_exp_array'] = ratio_exp_array
+    try:
+        with trange(total_epochs) as tr:  # repeating epochs
+            for epoch in tr:
+                # Generate data:
+                current_factor_ratio = np.clip(a=(ratio_exp_array[epoch] - 0.5) / (np.max(ratio_exp_array) - 0.5),
+                                               a_min=0, a_max=1)
+                tmp0, tmp1 = generate_synt_data(n_total=dict_data_params['n_total'],
+                                           n_times=dict_data_params['n_times'],
+                                           n_freq=dict_data_params['n_freq'],
+                                           ratio_train=dict_data_params['ratio_train'],
+                                           ratio_exp=ratio_exp_array[epoch],
+                                           noise_scale=dict_data_params['noise_scale'],
+                                           double_length=dict_data_params['doublesse'])
+                x_train, y_train, x_test, y_test = tmp0
+                labels_train, labels_test = tmp1
+
+                ## Create data loader objects:
+                train_ds = TensorDataset(x_train, y_train)
+                train_dl = DataLoader(train_ds, batch_size=dict_training_params['bs'])
+
+                test_ds = TensorDataset(x_test, y_test)
+                test_dl = DataLoader(test_ds, batch_size=dict_training_params['bs'])
+
+                assert labels_train.ndim == 1 and labels_test.ndim == 1
+                assert len(labels_train) == x_train.shape[0] and len(labels_test) == x_test.shape[0]
+
+                ## Training algorithM:
+                if epoch == 0:
+                    tr.set_description(init_str)
+                else:
+                    update_str = f'Epoch {epoch}/{total_epochs}. Train loss: {np.round(prev_loss, 6)}'
+                    tr.set_description(update_str)
+                rnn.train()  # set to train model (i.e. allow gradient computation/tracking)
+                it_train = 0
+                for xb, yb in train_dl:  # returns torch(n_bs x n_times x n_freq)
+                    curr_label = labels_train[it_train]  # this works if batch size == 1
+                    full_pred = compute_full_pred(model=rnn, xdata=xb)  # predict time trace
+                    loss, _ = tau_loss(y_est=full_pred, y_true=yb, model=rnn, mnm_only=mnm_only,
+                                    reg_param=dict_training_params['l1_param'], match_times=[13, 14], # dict_training_params['eval_times'],  #
+                                    tau_array=dict_training_params['eval_times'], label=curr_label,
+                                    simulated_annealing=True, factor_sa_pred=current_factor_ratio)  # compute loss
+                    loss.backward()  # compute gradients
+                    optimiser.step()  # update
+                    optimiser.zero_grad()   # reset
+                    it_train += 1
+
+                rnn.eval()  # evaluation mode -> disable gradient tracking
+                with torch.no_grad():  # to be sure
+                    ## Compute losses for saving:
+                    full_pred = compute_full_pred(model=rnn, xdata=x_train)
+                    train_loss, _ = tau_loss(y_est=full_pred, y_true=y_train, model=rnn, mnm_only=mnm_only,
+                                          reg_param=dict_training_params['l1_param'], match_times=[13, 14], #dict_training_params['eval_times'],  #
+                                          tau_array=dict_training_params['eval_times'], label=labels_train,
+                                          simulated_annealing=True, factor_sa_pred=current_factor_ratio)
+                    rnn.train_loss_arr.append(float(train_loss.detach().numpy()))
+
+                    full_test_pred = compute_full_pred(model=rnn, xdata=x_test)
+                    test_loss, ratio = split_loss(y_est=full_test_pred, y_true=y_test, model=rnn,
+                                                  reg_param=dict_training_params['l1_param'],
+                                                  tau_array=dict_training_params['eval_times'],
+                                                  return_ratio_ce=True, match_times=[13, 14],  # dict_training_params['eval_times'], #
+                                                  label=labels_test, mnm_only=mnm_only,
+                                                  simulated_annealing=True, factor_sa_pred=current_factor_ratio)
+                    rnn.test_loss_arr.append(float(test_loss.detach().numpy()))
+                    rnn.test_loss_ratio_ce.append(float(ratio.detach().numpy()))
+
+                    ## Inspect training loss for convergence
+                    new_loss = rnn.train_loss_arr[epoch]
+                    diff = np.abs(new_loss - prev_loss) / (new_loss + prev_loss)
+                    if dict_training_params['check_conv']:
+                        if diff < dict_training_params['conv_rel_tol']:
+                            rnn.info_dict['converged'] = True
+                            print(f'Converged at epoch {epoch},  loss: {new_loss}')
+                            break  # end training
+                    prev_loss = new_loss  # update current loss
+                    rnn.info_dict['trained_epochs'] += 1  # add to grand total
+
+        ## Set to evaluate mode and cutoff for early termination
+        rnn.eval()
+        if verbose > 0:
+            print('Training finished. Results saved in RNN Class')
+        return rnn
+    except KeyboardInterrupt: # end prematurely by Ctrl+C
+        rnn.eval()
+        if verbose > 0:
+            print(f'Training ended prematurely by user at epoch {epoch}.\nResults saved in RNN Class.')
+        return rnn
+
+
 def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
                   save_inplace=True, label_name='alpha', sparsity_c=1e-1, bool_train_decoder=True):
     n_nodes = rnn_model.info_dict['n_nodes']
@@ -478,6 +601,8 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/',
     if mnm_only:
         assert mnm
         print('MNM ONLY !!')
+    elif not mnm_only and not mnm:
+        print("PREDICTION ONLY")
     else:
         print('MNM + prediction task')
     try:
@@ -518,6 +643,53 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/',
         return rnn  # return latest
     except KeyboardInterrupt:
         print('KeyboardInterrupt, exit')
+
+
+def init_train_save_rnn_sa(t_dict, d_dict, n_simulations=1, save_folder='models/',
+                           mnm=False, accumulate=False, mnm_only=False):
+    assert mnm and not accumulate and not mnm_only  # current assumptions for use case simulated annealing
+    assert d_dict['ratio_exp'] > 0.5  # this will become max during SA
+    assert d_dict['ratio_exp'] == 0.75  # temp
+    print('SIMULATED ANNEALING')
+    try:
+        for nn in range(n_simulations):
+            print(f'\n-----------\nsimulation {nn}/{n_simulations}')
+            ## Generate data:
+            # tmp0, tmp1 = generate_synt_data(n_total=d_dict['n_total'],
+            #                            n_times=d_dict['n_times'],
+            #                            n_freq=d_dict['n_freq'],
+            #                            ratio_train=d_dict['ratio_train'],
+            #                            ratio_exp=d_dict['ratio_exp'],
+            #                            noise_scale=d_dict['noise_scale'],
+            #                            double_length=d_dict['doublesse'])
+            # x_train, y_train, x_test, y_test = tmp0
+            # labels_train, labels_test = tmp1
+
+            ## Initiate RNN model
+            if mnm is False:
+                rnn = RNN(n_stim=d_dict['n_freq'], n_nodes=t_dict['n_nodes'])  # Create RNN class
+            elif mnm:
+                rnn = RNN_MNM(n_stim=d_dict['n_freq'], n_nodes=t_dict['n_nodes'],
+                              accumulate=accumulate)  # Create RNN class
+            opt = torch.optim.SGD(rnn.parameters(), lr=t_dict['learning_rate'])  # call optimiser from pytorhc
+            rnn.set_info(param_dict={**d_dict, **t_dict, **{'simulated_annealing': True}})
+
+            ## Train with BPTT
+            rnn = bptt_training_sa(rnn=rnn, optimiser=opt, dict_training_params=t_dict,
+                                   verbose=0,
+                                   mnm_only=mnm_only, dict_data_params=d_dict)
+
+            ## Decode cross temporally
+            score_mat, decoder_dict, _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
+                                                                       n_samples=None, ratio_train=0.8, verbose=False)
+
+            ## Save results:
+            rnn.save_model(folder=save_folder)
+        return rnn  # return latest
+    except KeyboardInterrupt:
+        print('KeyboardInterrupt, exit')
+
+
 
 def train_single_decoder_new_data(rnn, ratio_expected=0.5, label='alpha',
                                   n_samples=None, ratio_train=0.8, verbose=False,

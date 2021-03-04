@@ -152,7 +152,10 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
         rnn = ru.load_rnn(rnn_name=os.path.join(rnn_folder, rnn_name))
         if i_rnn == 0:
             n_tp = len(rnn.test_loss_split['B'])
-            assert n_tp == rnn.info_dict['n_epochs']  # double check and  assume it is the same for all rnns in rnn_folder\
+            if 'simulated_annealing' in list(rnn.info_dict.keys()) and rnn.info_dict['simulated_annealing']:
+                pass
+            else:
+                assert n_tp == rnn.info_dict['n_epochs']  # double check and  assume it is the same for all rnns in rnn_folder\
             conv_dict = {key: np.zeros((n_rnn, n_tp)) for key in rnn.test_loss_split.keys()}
             if plot_total:
                 conv_dict['pred'] = np.zeros((n_rnn, n_tp))
@@ -198,31 +201,34 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
 
     return (ax_top, ax_bottom)
 
-def plot_split_perf_custom(folder_pred, folder_mnmpred, folder_mnm, ax=None):
+def plot_split_perf_custom(folder_pred, folder_mnmpred, folder_mnm, ax=None,
+                           plot_legend=True, legend_anchor=(1, 1)):
     if ax is None:
         ax = plt.subplot(111)
 
     ## prediction only
     _ = plot_split_perf(rnn_folder=folder_pred, list_top=['pred'], lw=5,
                         linestyle_custom_dict={'pred': '-'}, colour_custom_dict={'pred': [67 / 255, 0, 0]},
-                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': r'$H_{Pred}$' + '    (Pred-only)'})
+                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': r'$H_{Pred}$' + f'    (Pred-only, N={len(os.listdir(folder_pred))})'})
 
     ## mnm only
     _ = plot_split_perf(rnn_folder=folder_mnm, list_top=['MNM'], lw=5,
                         linestyle_custom_dict={'MNM': '-'}, colour_custom_dict={'MNM': [207 / 255, 143 / 255, 23 / 255]},
-                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'MNM': r'$H_{M/NM}$' + '   (MNM-only)'})
+                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'MNM': r'$H_{M/NM}$' + f'   (MNM-only, N={len(os.listdir(folder_mnm))})'})
 
     ## mnm+ prediction only
     colour_comb = [73 / 255, 154 / 255, 215 / 255]
     _ = plot_split_perf(rnn_folder=folder_mnmpred, list_top=['pred', 'MNM'], lw=5,
                         linestyle_custom_dict={'pred': ':', 'MNM': '-'},
                         colour_custom_dict={'pred': colour_comb, 'MNM': colour_comb},
-                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': r'$H_{Pred}$' + '    (Pred & MNM)',
-                                                                                       'MNM': r'$H_{M/NM}$' + '   (Pred & MNM)'})
+                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': r'$H_{Pred}$' + f'    (Pred & MNM,  N={len(os.listdir(folder_mnmpred))})',
+                                                                                       'MNM': r'$H_{M/NM}$' + f'   (Pred & MNM,  N={len(os.listdir(folder_mnmpred))})'})
 
-    ax.legend(frameon=False, bbox_to_anchor=(1.8, 1))
+    if plot_legend:
+        ax.legend(frameon=False, bbox_to_anchor=legend_anchor)
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
+    ax.set_ylim([-0.2, 1.2])
     return ax
 
 def plot_decoder_crosstemp_perf(score_matrix, ax=None, ticklabels='', cmap_hm = 'BrBG', v_max=None, c_bar=True,
@@ -1400,4 +1406,30 @@ def plot_figure_mnm(df_switch, rnn_mnm_folder, save_fig=False, train_times = np.
 
     if save_fig:
         plt.savefig('figures/thesis/fig5_python.svg', bbox_to_inches='tight')
+    return fig
+
+def plot_sa_convergence(sim_an_folder, pred_folder, mnm_folder, figsize=(6, 4)):
+
+    ratio_exp_array = None
+    for i_rnn, rnn_name in enumerate(os.listdir(sim_an_folder)):
+        rnn = ru.load_rnn(os.path.join(sim_an_folder, rnn_name))
+        assert rnn.info_dict['simulated_annealing']
+        if i_rnn == 0:
+            ratio_exp_array = rnn.info_dict['ratio_exp_array']
+        else:
+            assert (ratio_exp_array == rnn.info_dict['ratio_exp_array']).all()
+    fig = plt.figure(constrained_layout=False, figsize=figsize)
+    gs_conv = fig.add_gridspec(ncols=1, nrows=1, bottom=0, top=0.75, left=0, right=1)
+    gs_ratio = fig.add_gridspec(ncols=1, nrows=1, bottom=0.85, top=1, left=0, right=1)
+    ax_conv = fig.add_subplot(gs_conv[0])
+    ax_ratio = fig.add_subplot(gs_ratio[0])
+    plot_split_perf_custom(folder_pred=pred_folder,
+                          folder_mnm=mnm_folder,
+                          folder_mnmpred=sim_an_folder, ax=ax_conv,
+                          legend_anchor=(1, 1))
+    ax_ratio.plot(ratio_exp_array, linewidth=3, c='grey')
+    ax_ratio.set_xticklabels([])
+    for sp_name in ['top', 'right']:
+        ax_ratio.spines[sp_name].set_visible(False)
+    ax_ratio.set_ylabel(r'$P(\alpha = \beta)$');
     return fig
