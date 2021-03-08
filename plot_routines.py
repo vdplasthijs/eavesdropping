@@ -16,6 +16,7 @@ from mpl_toolkits.axes_grid1.colorbar import colorbar as mpl_colorbar
 import seaborn as sns
 import pickle, os, sys
 import scipy.cluster, scipy.spatial
+import sklearn.decomposition
 import bptt_rnn as bp
 import rot_utilities as ru
 import pandas as pd
@@ -295,6 +296,34 @@ def plot_raster_trial_average(forw, ax=None, save_fig=False, reverse_order=False
     if save_fig:
         plt.savefig(fig_name, bbox_inches='tight')
     return ol
+
+def plot_pop_trial_average(forw, ax=None, save_fig=False,
+                           fig_name=None):
+    trial_types = ['11', '12', '21', '22']
+    trial_inds_dict = {x: np.where(forw['labels_test'] == x)[0] for x in trial_types}
+    pop_activity = {}
+    pca = sklearn.decomposition.PCA(n_components=5).fit(forw['test'].mean(0))
+    print(pca.n_components_, pca.components_.shape, pca.explained_variance_ratio_)
+
+    for i_tt, tt in enumerate(trial_types):
+        pop_activity[tt] = pca.transform(forw['test'][trial_inds_dict[tt], :, :].mean(0))
+
+    if ax is None:
+        ax = plt.subplot(111)
+
+    for i_tt, tt in enumerate([ '11', '22']):
+        for i in range(15):
+            if i == 8:
+                tmp_lab = tt
+            else:
+                tmp_lab = None
+            ax.plot(pop_activity[tt][i:i+2, 0], pop_activity[tt][i:i+2, 1], label=tmp_lab,
+                    linewidth=3, alpha=i/24 + 0.25, c=color_dict_stand[i_tt])
+    ax.legend()
+    ax.set_xlabel("PC 1")
+    ax.set_ylabel("PC 2")
+    ax.set_title('PCA space plot')
+    return ax
 
 def plot_dynamic_decoding_axes(rnn, ticklabels=double_time_labels_blank[:-1],
                                neuron_order=None, label='alpha'):
