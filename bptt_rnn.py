@@ -19,7 +19,8 @@ import rot_utilities as ru
 
 def generate_synt_data(n_total=100, n_times=9, n_freq=8,
                        ratio_train=0.8, ratio_exp=0.5,
-                       noise_scale=0.05, double_length=False):
+                       noise_scale=0.05, double_length=False,
+                       late_beta=False):
     '''Generate synthetic data, see notebook for description.'''
     assert ratio_train <= 1 and ratio_train >= 0
     n_total = int(n_total)
@@ -28,6 +29,9 @@ def generate_synt_data(n_total=100, n_times=9, n_freq=8,
     ratio_unexp = 1 - ratio_exp
     ratio_exp, ratio_unexp = ratio_exp / (ratio_exp + ratio_unexp ),  ratio_unexp / (ratio_exp + ratio_unexp)
     assert ratio_exp + ratio_unexp == 1
+    
+    if late_beta:  # if C and D are to be swapped, assert there are enough time points
+        assert n_times == 9
 
     ## Create data sequences of 5, 7 or 9 elements
     ## 0-0   1-A1    2-A2    3-B1    4-B2    5-C1   6-C2    7-D
@@ -40,23 +44,30 @@ def generate_synt_data(n_total=100, n_times=9, n_freq=8,
     all_seq[:n_half_total, 3, 3] = 1  # B1
     all_seq[n_half_total:, 3, 4] = 1  # B2
     if n_times >= 7: # Add C
+        if late_beta:
+            time_c = 7
+            time_d = 5
+            print('WARNING: C & D ARE SWAPPED IN TIME')
+        elif late_beta is False:
+            time_c = 5
+            time_d = 7
         if ratio_exp == 1:
-            all_seq[:n_half_total, 5, 5] = 1  # C1
+            all_seq[:n_half_total, time_c, 5] = 1  # C1
             labels[:n_half_total] = '11'
-            all_seq[n_half_total:, 5, 6] = 1  # C2
+            all_seq[n_half_total:, time_c, 6] = 1  # C2
             labels[n_half_total:] = '22'
         else:  # Expected & Unexpected cases for both 1 and 2 lines
             n_exp_half = int(np.round(ratio_exp * n_half_total))
-            all_seq[:n_exp_half, 5, 5] = 1  # exp C1
+            all_seq[:n_exp_half, time_c, 5] = 1  # exp C1
             labels[:n_exp_half] = '11'
-            all_seq[n_exp_half:n_half_total, 5, 6] = 1  #unexp C2
+            all_seq[n_exp_half:n_half_total, time_c, 6] = 1  #unexp C2
             labels[n_exp_half:n_half_total] = '12'
-            all_seq[n_half_total:(n_half_total + n_exp_half), 5, 6] = 1 # exp C2
+            all_seq[n_half_total:(n_half_total + n_exp_half), time_c, 6] = 1 # exp C2
             labels[n_half_total:(n_half_total + n_exp_half)] = '22'
-            all_seq[(n_half_total + n_exp_half):, 5, 5] = 1  # unexp C1
+            all_seq[(n_half_total + n_exp_half):, time_c, 5] = 1  # unexp C1
             labels[(n_half_total + n_exp_half):] = '21'
     if n_times == 9: # Add D
-        all_seq[:, 7, 7] = 1
+        all_seq[:, time_d, 7] = 1
 
     if double_length:  # If True: double the sequence lengths by inserting a copy of each element in place
         new_all_seq = np.zeros((n_total, 2 * n_times, n_freq))  # new sequence
@@ -279,13 +290,20 @@ def tau_loss(y_est, y_true, tau_array=np.array([2, 3]), label=None, match_times=
     return total_loss, (ce, reg_loss, ce_match)
 
 def split_loss(y_est, y_true, tau_array=np.array([2, 3]), label=None, match_times=[13, 14],
-               time_prediction_array_dict={'B': [5, 6], 'C': [9, 10], 'C1': [9], 'C2': [10], 'D': [13, 14],
-                                           '0': [4, 7, 8, 11, 12, 15, 16], '0_postA': [4],
-                                           '0_postB': [7, 8], '0_postC': [11, 12], '0_postD': [15, 16]},
+               time_prediction_array_dict=None, late_beta=False,
                model=None, reg_param=0.001, return_ratio_ce=False, mnm_only=True,
                simulated_annealing=False, factor_sa_pred=1):
     '''Compute Cross Entropy for each given time array, and L1 regularisation.'''
     assert model is not None
+    if time_prediction_array_dict is None and late_beta is False:
+        time_prediction_array_dict={'B': [5, 6], 'C': [9, 10], 'C1': [9], 'C2': [10], 'D': [13, 14],
+                                    '0': [4, 7, 8, 11, 12, 15, 16], '0_postA': [4],
+                                    '0_postB': [7, 8], '0_postC': [11, 12], '0_postD': [15, 16]}
+    elif time_prediction_array_dict is None and late_beta is True:
+        time_prediction_array_dict={'B': [5, 6], 'C': [13, 14], 'C1': [13], 'C2': [14], 'D': [9, 10],
+                                    '0': [4, 7, 8, 11, 12, 15, 16], '0_postA': [4],
+                                    '0_postB': [7, 8], '0_postC': [15, 16], '0_postD': [11, 12]}
+    assert time_prediction_array_dict is not None and type(time_prediction_array_dict) == dict
     for key, tau_array in time_prediction_array_dict.items():  # compute separate times separately
         y_est_trunc = y_est[:, tau_array, :model.n_stim]  # only evaluated these time points
         y_true_trunc = y_true[:, tau_array, :]
@@ -327,7 +345,7 @@ def compute_full_pred(xdata, model, mnm=False):
 
 def bptt_training(rnn, optimiser, dict_training_params,
                   x_train, x_test, y_train, y_test, labels_train=None,
-                  labels_test=None, verbose=1, mnm_only=True):
+                  labels_test=None, verbose=1, mnm_only=True, late_beta=False):
     '''Training algorithm for backpropagation through time, given a RNN model, optimiser,
     dictionary with training parameters and train and test data. RNN is NOT reset,
     so continuation training is possible. Training can be aborted prematurely by Ctrl+C,
@@ -388,7 +406,8 @@ def bptt_training(rnn, optimiser, dict_training_params,
                                                   reg_param=dict_training_params['l1_param'],
                                                   tau_array=dict_training_params['eval_times'],
                                                   return_ratio_ce=True, match_times=[13, 14],  # dict_training_params['eval_times'], #
-                                                  label=labels_test, mnm_only=mnm_only)
+                                                  label=labels_test, mnm_only=mnm_only,
+                                                  late_beta=late_beta)
                     rnn.test_loss_arr.append(float(test_loss.detach().numpy()))
                     rnn.test_loss_ratio_ce.append(float(ratio.detach().numpy()))
 
@@ -503,7 +522,8 @@ def bptt_training_sa(rnn, optimiser, dict_training_params,
                                                   tau_array=dict_training_params['eval_times'],
                                                   return_ratio_ce=True, match_times=[13, 14],  # dict_training_params['eval_times'], #
                                                   label=labels_test, mnm_only=mnm_only,
-                                                  simulated_annealing=True, factor_sa_pred=current_factor_ratio)
+                                                  simulated_annealing=True, factor_sa_pred=current_factor_ratio,
+                                                  late_beta=late_beta)
                     rnn.test_loss_arr.append(float(test_loss.detach().numpy()))
                     rnn.test_loss_ratio_ce.append(float(ratio.detach().numpy()))
 
@@ -597,7 +617,7 @@ def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
         return None, None, forw_mat
 
 def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/',
-                        mnm=False, accumulate=False, mnm_only=True):
+                        mnm=False, accumulate=False, mnm_only=True, late_beta=False):
     if mnm_only:
         assert mnm
         print('MNM ONLY !!')
@@ -615,7 +635,8 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/',
                                        ratio_train=d_dict['ratio_train'],
                                        ratio_exp=d_dict['ratio_exp'],
                                        noise_scale=d_dict['noise_scale'],
-                                       double_length=d_dict['doublesse'])
+                                       double_length=d_dict['doublesse'],
+                                       late_beta=late_beta)
             x_train, y_train, x_test, y_test = tmp0
             labels_train, labels_test = tmp1
 
@@ -627,12 +648,13 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/',
                               accumulate=accumulate)  # Create RNN class
             opt = torch.optim.SGD(rnn.parameters(), lr=t_dict['learning_rate'])  # call optimiser from pytorhc
             rnn.set_info(param_dict={**d_dict, **t_dict})
+            rnn.info_dict['late_beta'] = late_beta
 
             ## Train with BPTT
             rnn = bptt_training(rnn=rnn, optimiser=opt, dict_training_params=t_dict,
                                 x_train=x_train, x_test=x_test, y_train=y_train, y_test=y_test,
                                 labels_train=labels_train, labels_test=labels_test, verbose=0,
-                                mnm_only=mnm_only)
+                                mnm_only=mnm_only, late_beta=late_beta)
 
             ## Decode cross temporally
             score_mat, decoder_dict, _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
@@ -693,7 +715,8 @@ def init_train_save_rnn_sa(t_dict, d_dict, n_simulations=1, save_folder='models/
 
 def train_single_decoder_new_data(rnn, ratio_expected=0.5, label='alpha',
                                   n_samples=None, ratio_train=0.8, verbose=False,
-                                  sparsity_c=0.1, bool_train_decoder=True):
+                                  sparsity_c=0.1, bool_train_decoder=True,
+                                  late_beta=False):
     '''Generates new data, and then trains the decoder via train_decoder()'''
     if n_samples is None:
         n_samples = rnn.info_dict['n_total']
@@ -705,7 +728,8 @@ def train_single_decoder_new_data(rnn, ratio_expected=0.5, label='alpha',
                                    ratio_train=ratio_train,
                                    ratio_exp=ratio_expected,
                                    noise_scale=rnn.info_dict['noise_scale'],
-                                   double_length=rnn.info_dict['doublesse'])
+                                   double_length=rnn.info_dict['doublesse'],
+                                   late_beta=late_beta)
     x_train, y_train, x_test, y_test = tmp0
     labels_train, labels_test = tmp1
     if verbose > 0:
