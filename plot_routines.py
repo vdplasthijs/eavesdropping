@@ -202,6 +202,9 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
 
     return (ax_top, ax_bottom)
 
+def len_data_files(dir_path):
+    return len([x for x in os.listdir(dir_path) if x[-5:] == '.data'])
+
 def plot_split_perf_custom(folder_pred, folder_mnmpred, folder_mnm, ax=None,
                            plot_legend=True, legend_anchor=(1, 1)):
     if ax is None:
@@ -210,20 +213,20 @@ def plot_split_perf_custom(folder_pred, folder_mnmpred, folder_mnm, ax=None,
     ## prediction only
     _ = plot_split_perf(rnn_folder=folder_pred, list_top=['pred'], lw=5,
                         linestyle_custom_dict={'pred': '-'}, colour_custom_dict={'pred': [67 / 255, 0, 0]},
-                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': r'$H_{Pred}$' + f'    (Pred-only, N={len(os.listdir(folder_pred))})'})
+                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': r'$H_{Pred}$' + f'    (Pred-only, N={len_data_files(folder_pred)})'})
 
     ## mnm only
     _ = plot_split_perf(rnn_folder=folder_mnm, list_top=['MNM'], lw=5,
                         linestyle_custom_dict={'MNM': '-'}, colour_custom_dict={'MNM': [207 / 255, 143 / 255, 23 / 255]},
-                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'MNM': r'$H_{M/NM}$' + f'   (MNM-only, N={len(os.listdir(folder_mnm))})'})
+                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'MNM': r'$H_{M/NM}$' + f'   (MNM-only, N={len_data_files(folder_mnm)})'})
 
     ## mnm+ prediction only
     colour_comb = [73 / 255, 154 / 255, 215 / 255]
     _ = plot_split_perf(rnn_folder=folder_mnmpred, list_top=['pred', 'MNM'], lw=5,
                         linestyle_custom_dict={'pred': ':', 'MNM': '-'},
                         colour_custom_dict={'pred': colour_comb, 'MNM': colour_comb},
-                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': r'$H_{Pred}$' + f'    (Pred & MNM,  N={len(os.listdir(folder_mnmpred))})',
-                                                                                       'MNM': r'$H_{M/NM}$' + f'   (Pred & MNM,  N={len(os.listdir(folder_mnmpred))})'})
+                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': r'$H_{Pred}$' + f'    (Pred & MNM,  N={len_data_files(folder_mnmpred)})',
+                                                                                       'MNM': r'$H_{M/NM}$' + f'   (Pred & MNM,  N={len_data_files(folder_mnmpred)})'})
 
     if plot_legend:
         ax.legend(frameon=False, bbox_to_anchor=legend_anchor)
@@ -1462,3 +1465,29 @@ def plot_sa_convergence(sim_an_folder, pred_folder, mnm_folder, figsize=(6, 4)):
         ax_ratio.spines[sp_name].set_visible(False)
     ax_ratio.set_ylabel(r'$P(\alpha = \beta)$');
     return fig
+
+
+def plot_compare_early_late_beta(early_folder='models/75-25_SplitLoss_Xmodels/1000epochs/', 
+                                 late_folder='models/75-25_late-beta_Xmodels/', ax=None):
+
+    if ax is None:
+        ax = plt.subplot(111)
+
+    ## early beta
+    _ = plot_split_perf(rnn_folder=early_folder, list_top=['pred', 'C'], lw=5,
+                            linestyle_custom_dict={'pred': '-', 'C': '-'}, colour_custom_dict={'pred': '#730000', 'C': '#ed0505'},
+                            ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': r'$H_{Pred}$' + f'    (Pred-only, N={len_data_files("models/75-25_SplitLoss_Xmodels/1000epochs/")})',
+                                                                                            'C': r'$H_C$' + ' only'})
+
+    ## late beta
+    _ = plot_split_perf(rnn_folder=late_folder, list_top=['pred', 'C'], lw=5,
+                            linestyle_custom_dict={'pred': '-', 'C': '-'}, colour_custom_dict={'pred': '#0041ab', 'C': '#4b85e3'},
+                            ax_top=ax, ax_bottom=None, plot_bottom=False, 
+                            label_dict_keys={'pred': r'$H_{Pred}$' + f'    (Pred-only, N={len_data_files("models/75-25_late-beta_Xmodels/")})',
+                                             'C': r'$H_C$' + ' only'})
+    ax.text(s=r'$A_{\alpha} \; \to \; B_{\alpha} \; \to \; C_{\beta} \; \to \; D$', x=20, y=0.95, c='#ed0505')
+    ax.text(s=r'$A_{\alpha} \; \to \; B_{\alpha} \; \to \; D  \; \to \; C_{\beta}$ ', x=20, y=0.85, c='#0041ab')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.set_title('Delaying the ' + r'$C_{\beta}$' + ' stimulus hardly influences \nprediction task performance ' + r'$(P(\alpha = \beta) = 0.75)$')
+    return ax
