@@ -257,8 +257,10 @@ def plot_decoder_crosstemp_perf(score_matrix, ax=None, ticklabels='', cmap_hm = 
         plt.savefig(fig_name, bbox_inches='tight')
     return (ax, hm)
 
-def plot_raster_trial_average(forw, ax=None, save_fig=False, reverse_order=False, c_bar=True, ol=None,
-                              fig_name='figures/example_high_forward_difference.pdf', index_label=0, plot_mnm=False):
+def plot_raster_trial_average(forw, ax=None, save_fig=False, reverse_order=False, 
+                              c_bar=True, ol=None, time_axis_labels=None,
+                              fig_name='figures/example_high_forward_difference.pdf', 
+                              index_label=0, plot_mnm=False, plot_correlation=False):
     if plot_mnm:
         labels_use_1 = np.array([x == '11' or x == '22' for x in forw['labels_train']])  # expected / match
         labels_use_2 = np.array([x == '21' or x == '12' for x in forw['labels_train']])  # unexpected / non match
@@ -287,15 +289,32 @@ def plot_raster_trial_average(forw, ax=None, save_fig=False, reverse_order=False
     #     rev_ol[el_ol] = i_ol
     plot_diff = plot_diff[:, ol]
     th = np.max(np.abs(plot_diff)) # threshold for visualisation
-    sns.heatmap(plot_diff.T, cmap=plot_cmap, vmin=-1 * th, vmax=th, ax=ax,
-                     xticklabels=double_time_labels_blank[:-1], cbar=c_bar)
+    if time_axis_labels is None:
+        time_axis_labels = double_time_labels_blank[:-1]
+    assert len(time_axis_labels) == plot_diff.shape[0]  
+    if plot_correlation is False:
+        sns.heatmap(plot_diff.T, cmap=plot_cmap, vmin=-1 * th, vmax=th, ax=ax,
+                        xticklabels=time_axis_labels, cbar=c_bar)
+        ax.set_yticklabels(rotation=0, labels=ax.get_yticklabels())
+        ax.set_ylabel('neuron #')
+    elif plot_correlation:
+        corr_mat = np.corrcoef(plot_diff)
+        assert corr_mat.shape[0] == corr_mat.shape[1] and corr_mat.shape[0] == len(time_axis_labels)
+        assert time_axis_labels[0] == '' and time_axis_labels[1] == ''
+        ## first two are before stim so correlation is just rnn noise
+        corr_mat[:2, :] = np.nan
+        corr_mat[:, :2] = np.nan
+        
+        sns.heatmap(corr_mat, cmap='BrBG', ax=ax, xticklabels=time_axis_labels, yticklabels=time_axis_labels, 
+                    cbar=c_bar, vmin=-1, vmax=1)
+        ax.set_yticklabels(rotation=90, labels=ax.get_yticklabels())
+        ax.set_ylabel('Time')
     ax.invert_yaxis()
-    ax.set_yticklabels(rotation=0, labels=ax.get_yticklabels())
     ax.set_xticklabels(rotation=0, labels=ax.get_xticklabels())
     bottom, top = ax.get_ylim()
     ax.set_ylim(bottom - 0.5, top + 1.5)
     ax.set_title('Activity difference between green and purple trials', weight='bold')
-    ax.set_xlabel('Time'); ax.set_ylabel('neuron #');
+    ax.set_xlabel('Time');
     if save_fig:
         plt.savefig(fig_name, bbox_inches='tight')
     return ol
@@ -1491,3 +1510,124 @@ def plot_compare_early_late_beta(early_folder='models/75-25_SplitLoss_Xmodels/10
     ax.spines['right'].set_visible(False)
     ax.set_title('Delaying the ' + r'$C_{\beta}$' + ' stimulus hardly influences \nprediction task performance ' + r'$(P(\alpha = \beta) = 0.75)$')
     return ax
+
+def plot_explore_one_rnn(rnn, plot_mnm_matrix=True, decoder_type='LDA'):
+    print(rnn)
+
+    if 'late_beta' in rnn.info_dict.keys():
+        late_beta = rnn.info_dict['late_beta']
+    else:
+        late_beta = False
+
+    if late_beta:
+        time_axis_labels = double_time_labels_blank[:-1]
+        time_axis_labels[15] = 'C'
+        time_axis_labels[14] = 'C'
+        time_axis_labels[11] = 'D'
+        time_axis_labels[10] = 'D'
+    else:
+        time_axis_labels = double_time_labels_blank[:-1] 
+
+    _, __, forw  = bp.train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5, 
+                                                    sparsity_c=0.1, bool_train_decoder=True,
+                                                    late_beta=late_beta, decoder_type=decoder_type)
+
+    fig = plt.figure(constrained_layout=False, figsize=(9, 8))
+    gs_rasters = fig.add_gridspec(ncols=3, nrows=1, left=0.05, right=0.95,
+                                top=0.95, bottom=0.75, wspace=0.4, hspace=0)
+    gs_plots = fig.add_gridspec(ncols=3, nrows=1, left=0.05, right=0.95,
+                                top=0.58, bottom=0.4, wspace=0.4, hspace=0)
+    gs_decoding = fig.add_gridspec(ncols=3, nrows=1, left=0.05, right=0.95,
+                                top=0.25, bottom=0.05, wspace=0.4, hspace=0)
+    ax_alpha = fig.add_subplot(gs_rasters[0])
+    ol = plot_raster_trial_average(forw=forw, ax=ax_alpha, index_label=0, 
+                                   time_axis_labels=time_axis_labels)
+    ax_alpha.set_title('Alpha')
+
+    ax_beta = fig.add_subplot(gs_rasters[1])
+    ol = plot_raster_trial_average(forw=forw, ax=ax_beta, index_label=1, ol=ol, 
+                                   time_axis_labels=time_axis_labels)
+    ax_beta.set_title('beta')
+
+    if plot_mnm_matrix:
+        ax_mnm = fig.add_subplot(gs_rasters[2])
+        ol = plot_raster_trial_average(forw=forw, ax=ax_mnm, plot_mnm=True, ol=ol, 
+                                   time_axis_labels=time_axis_labels)
+        ax_mnm.set_title('mnm')
+
+
+
+    ax_corr = fig.add_subplot(gs_plots[0])
+    ol = plot_raster_trial_average(forw=forw, ax=ax_corr, index_label=0, ol=ol, 
+                                   time_axis_labels=time_axis_labels, plot_correlation=True)
+    ax_corr.set_title('alpha correlation')
+
+    ax_angle = fig.add_subplot(gs_plots[1])
+    angle_alpha_beta, tmp = ru.angle_sensory_memory(forw=forw, ol=ol)
+    time_start_beta = np.min(np.where(np.array(time_axis_labels) == 'C')[0])
+    ax_angle.plot([1, 17], [90, 90], c='k')
+    ax_angle.plot(np.arange(time_start_beta, len(angle_alpha_beta)),
+                  angle_alpha_beta[time_start_beta:], linewidth=3)
+    ax_angle.set_xticks(np.arange(len(angle_alpha_beta)))
+    ax_angle.set_xticklabels(time_axis_labels);
+    ax_angle.set_ylim([0, 180]);
+    ax_angle.set_ylabel('Angle (deg)'); ax_angle.set_xlabel('Time')
+    ax_angle.set_title('angle between alpha and beta');
+
+    ax_loss = fig.add_subplot(gs_plots[2])
+    for key, arr in rnn.test_loss_split.items():
+        if '_' not in key:
+            arr = np.array(arr)
+            arr /= arr[0]
+            ax_loss.plot(arr, label=key, linewidth=3)
+    # ax_loss.plot(rnn.train_loss_arr, label='train', linewidth=3)
+    # ax_loss.plot(rnn.test_loss_arr, label='test', linewidth=3)
+    ax_loss.legend(bbox_to_anchor=(1.02, 1))
+    ax_loss.set_xlabel('epoch'); ax_loss.set_ylabel('loss');
+    ax_loss.set_title('Components of loss function')
+
+    ax_alpha_dec = fig.add_subplot(gs_decoding[0])
+    _, hm = plot_decoder_crosstemp_perf(score_matrix=rnn.decoding_crosstemp_score['alpha'],
+                            ax=ax_alpha_dec, c_bar=True, fontsize_ticks=8,
+                            ticklabels=time_axis_labels, v_max=1)
+    ax_alpha_dec.set_title('alpha decoding accuracy')#, weight='bold')
+
+
+    ## plot weights of alpha decoder over time
+    decoder_weight_mat = np.zeros((rnn.info_dict['n_nodes'], len(time_axis_labels)))
+    for tp in range(decoder_weight_mat.shape[1]):
+        if decoder_type == 'LDA':
+            decoder_weight_mat[:, tp] = np.squeeze(rnn.decoder_dict['alpha'][tp].means_[1, :] - 
+                                                rnn.decoder_dict['alpha'][tp].means_[0, :])[ol]
+        elif decoder_type == 'logistic_regression':
+            decoder_weight_mat[:, tp] = np.squeeze(rnn.decoder_dict['alpha'][tp].coef_)[ol]
+    
+    ax_decoder_alpha_weights = fig.add_subplot(gs_decoding[1])
+    sns.heatmap(decoder_weight_mat, 
+                ax=ax_decoder_alpha_weights,
+                cmap='coolwarm', xticklabels=time_axis_labels, 
+                vmax=np.max(np.abs(decoder_weight_mat)),
+                vmin=-1*np.max(np.abs(decoder_weight_mat)))
+    ax_decoder_alpha_weights.invert_yaxis()
+    ax_decoder_alpha_weights.set_yticklabels(rotation=0, labels=ax_decoder_alpha_weights.get_yticklabels())
+    ax_decoder_alpha_weights.set_xticklabels(rotation=0, labels=ax_decoder_alpha_weights.get_xticklabels())
+    bottom, top = ax_decoder_alpha_weights.get_ylim()
+    ax_decoder_alpha_weights.set_ylim(bottom - 0.5, top + 1.5)
+    ax_decoder_alpha_weights.set_xlabel('Time')
+    ax_decoder_alpha_weights.set_ylabel('neuron #')
+    ax_decoder_alpha_weights.set_title('alpha decoding weights')
+
+
+
+    ax_beta_dec = fig.add_subplot(gs_decoding[2])
+    ## If beta has not yet been trained:
+    # if 'beta' not in rnn.decoding_crosstemp_score.keys():
+    _, __, ___  = bp.train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5, 
+                                                sparsity_c=0.1, bool_train_decoder=True,
+                                                late_beta=late_beta, label='beta',
+                                                decoder_type=decoder_type)
+    _, hm = plot_decoder_crosstemp_perf(score_matrix=rnn.decoding_crosstemp_score['beta'],
+                            ax=ax_beta_dec, c_bar=True, fontsize_ticks=8,
+                            ticklabels=time_axis_labels, v_max=1)
+    ax_beta_dec.set_title('beta decoding accuracy')#, weight='bold')
+

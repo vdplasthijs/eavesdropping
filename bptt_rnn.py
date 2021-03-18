@@ -14,7 +14,7 @@ import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 import pickle, datetime, time, os, sys, git
 from tqdm import tqdm, trange
-import sklearn.svm, sklearn.model_selection
+import sklearn.svm, sklearn.model_selection, sklearn.discriminant_analysis
 import rot_utilities as ru
 
 def generate_synt_data(n_total=100, n_times=9, n_freq=8,
@@ -551,7 +551,8 @@ def bptt_training_sa(rnn, optimiser, dict_training_params,
 
 
 def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
-                  save_inplace=True, label_name='alpha', sparsity_c=1e-1, bool_train_decoder=True):
+                  save_inplace=True, label_name='alpha', sparsity_c=1e-1, 
+                  bool_train_decoder=True, decoder_type='logistic_regression'):
     n_nodes = rnn_model.info_dict['n_nodes']
     forw_mat = {'train': np.zeros((x_train.shape[0], x_train.shape[1], n_nodes)),  # trials x time x neurons
                 'test': np.zeros((x_test.shape[0], x_test.shape[1], n_nodes))}
@@ -595,8 +596,11 @@ def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
             tmp_var = True
             for tau in range(n_times):  # train time loop
                 # decoder_dict[tau] = sklearn.svm.LinearSVC(C=sparsity_c)  # define SVM
-                decoder_dict[tau] = sklearn.linear_model.LogisticRegression(C=sparsity_c,
-                                                        solver='saga', penalty='l1', max_iter=250)  # define log reg
+                if decoder_type == 'logistic_regression':
+                    decoder_dict[tau] = sklearn.linear_model.LogisticRegression(C=sparsity_c,
+                                                            solver='saga', penalty='l1', max_iter=250)  # define log reg
+                elif decoder_type == 'LDA':
+                     decoder_dict[tau] = sklearn.discriminant_analysis.QuadraticDiscriminantAnalysis()  # define log reg
                 decoder_dict[tau].fit(X=forw_mat['train'][:, tau, :],
                                       y=labels_use['train'])  # train SVM
                 for tt in range(n_times):  # test time loop
@@ -658,7 +662,8 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/',
 
             ## Decode cross temporally
             score_mat, decoder_dict, _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
-                                                            n_samples=None, ratio_train=0.8, verbose=False)
+                                                            n_samples=None, ratio_train=0.8, verbose=False,
+                                                            late_beta=late_beta)
 
             ## Save results:
             rnn.save_model(folder=save_folder)
@@ -703,7 +708,8 @@ def init_train_save_rnn_sa(t_dict, d_dict, n_simulations=1, save_folder='models/
 
             ## Decode cross temporally
             score_mat, decoder_dict, _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
-                                                                       n_samples=None, ratio_train=0.8, verbose=False)
+                                                                       n_samples=None, ratio_train=0.8, 
+                                                                       verbose=False, late_beta=late_beta)
 
             ## Save results:
             rnn.save_model(folder=save_folder)
@@ -716,7 +722,7 @@ def init_train_save_rnn_sa(t_dict, d_dict, n_simulations=1, save_folder='models/
 def train_single_decoder_new_data(rnn, ratio_expected=0.5, label='alpha',
                                   n_samples=None, ratio_train=0.8, verbose=False,
                                   sparsity_c=0.1, bool_train_decoder=True,
-                                  late_beta=False):
+                                  late_beta=False, decoder_type='LDA'):
     '''Generates new data, and then trains the decoder via train_decoder()'''
     if n_samples is None:
         n_samples = rnn.info_dict['n_total']
@@ -738,13 +744,14 @@ def train_single_decoder_new_data(rnn, ratio_expected=0.5, label='alpha',
     score_mat, decoder_dict, forward_mat = train_decoder(rnn_model=rnn, x_train=x_train, x_test=x_test,
                                            labels_train=labels_train, labels_test=labels_test,
                                            save_inplace=True, sparsity_c=sparsity_c, label_name=label,
-                                           bool_train_decoder=bool_train_decoder)
+                                           bool_train_decoder=bool_train_decoder, decoder_type=decoder_type)
     forward_mat['labels_train'] = labels_train
     forward_mat['labels_test'] = labels_test
     return score_mat, decoder_dict, forward_mat
 
 def train_multiple_decoders(rnn_folder='models/', ratio_expected=0.5,
-                            n_samples=None, ratio_train=0.8, label='alpha', reset_decoders=False):
+                            n_samples=None, ratio_train=0.8, label='alpha', 
+                            reset_decoders=False):
     '''train decoders for all RNNs in rnn_folder'''
     rnn_list = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
     for i_rnn, rnn_name in tqdm(enumerate(rnn_list)):
@@ -754,9 +761,13 @@ def train_multiple_decoders(rnn_folder='models/', ratio_expected=0.5,
         if reset_decoders:
             rnn.decoding_crosstemp_score = {}
             rnn.decoder_dict = {}
+        if 'late_beta' in rnn.info_dict.keys():
+            late_beta = rnn.info_dict['late_beta']
+        else:
+            late_beta = False
         _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=ratio_expected,
                                           n_samples=n_samples, ratio_train=ratio_train,
-                                          verbose=(i_rnn == 0), label=label) # results are saved in RNN class
+                                          verbose=(i_rnn == 0), label=label, late_beta=late_beta) # results are saved in RNN class
         rnn.save_model(folder=rnn_folder, verbose=0)  # save results to file
     return None
 
