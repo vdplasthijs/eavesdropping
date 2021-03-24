@@ -1631,3 +1631,91 @@ def plot_explore_one_rnn(rnn, plot_mnm_matrix=True, decoder_type='LDA'):
                             ticklabels=time_axis_labels, v_max=1)
     ax_beta_dec.set_title('beta decoding accuracy')#, weight='bold')
 
+
+def plot_distr_rotation_inds(rnn_folder, times_early=[6, 7], times_late=[10, 11],
+                             ax=None, verbose=1):
+
+    rnn_list = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
+
+    rot_ind_arr = np.zeros(len(rnn_list))
+    for i_rnn, rnn_name in enumerate(rnn_list):
+        ## Load RNN:
+        with open(rnn_folder + rnn_name, 'rb') as f:
+            rnn = pickle.load(f)
+        rot_ind_arr[i_rnn] = ru.rotation_index(mat=rnn.rep_corr_mat_dict['alpha'],
+                                               times_early=times_early, times_late=times_late)
+        
+
+    if ax is None:
+        ax = plt.subplot(111)
+
+
+    ax.set_xlabel('Rotation index')
+    ax.set_ylabel(f'PDF (N={len(rnn_list)})');
+    # ax.set_title('Histogram of patch', weight='bold')
+    n, bins, hist_patches = ax.hist(rot_ind_arr, color='k', bins=np.linspace(-1, 1, 21),
+                                         rwidth=0.9, alpha=0.9, density=True)
+    ## Colour hist bars: https://stackoverflow.com/questions/23061657/plot-histogram-with-colors-taken-from-colormap
+    cm = plt.cm.get_cmap('BrBG')
+    bin_centers = 0.5 * (bins[:-1] + bins[1:])
+    col = bin_centers - np.min(bin_centers)      # scale values to interval [0,1]
+    col /= np.max(col)
+    for c, p in zip(col, hist_patches):
+        plt.setp(p, 'facecolor', cm(c))
+
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    return rot_ind_arr
+
+def plot_many_corr_dec_mats(rnn_folder, n_rnns=3, save_fig=False, figname='figures/examples_corr_dec_mats.pdf'):
+    fig, ax_rot = plt.subplots(n_rnns, 2, gridspec_kw={'wspace': 0.6, 'hspace': 0.6}, figsize=(6, n_rnns * 3))
+    
+    rnn_list = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
+    for i_rnn, rnn_name in enumerate(rnn_list):
+
+        if i_rnn == n_rnns:
+            if save_fig:
+                plt.savefig(figname)
+            return fig
+
+        ## Load RNN:
+        with open(rnn_folder + rnn_name, 'rb') as f:
+            rnn = pickle.load(f)
+
+        if 'late_beta' in rnn.info_dict.keys():
+            late_beta = rnn.info_dict['late_beta']
+        else:
+            late_beta = False
+
+        if late_beta:
+            time_axis_labels = double_time_labels_blank[:-1]
+            time_axis_labels[15] = 'C'
+            time_axis_labels[14] = 'C'
+            time_axis_labels[11] = 'D'
+            time_axis_labels[10] = 'D'
+        else:
+            time_axis_labels = double_time_labels_blank[:-1]
+
+        sns.heatmap(rnn.rep_corr_mat_dict['alpha'], ax=ax_rot[i_rnn, 0], vmax=1, vmin=-1,
+                    cmap='BrBG', yticklabels=time_axis_labels, #fontsize_ticks=8,
+                            xticklabels=time_axis_labels)
+        ax_rot[i_rnn, 0].invert_yaxis()
+
+
+        _, hm = plot_decoder_crosstemp_perf(score_matrix=rnn.decoding_crosstemp_score['alpha'],
+                            ax=ax_rot[i_rnn, 1], c_bar=True, fontsize_ticks=8,
+                            ticklabels=time_axis_labels, v_max=1)
+
+        if i_rnn == 0:
+            ax_rot[i_rnn, 0].set_title('Pearson correlation')
+            ax_rot[i_rnn, 1].set_title('Logistic regression decoding')
+        else:
+            ax_rot[i_rnn, 0].set_title('')
+            ax_rot[i_rnn, 1].set_title('')
+
+
+    if save_fig:
+        plt.savefig(figname)
+    return fig
+

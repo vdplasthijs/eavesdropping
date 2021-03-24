@@ -209,3 +209,30 @@ def get_train_test_diag():
     tmp_train, tmp_test = (np.array([8, 9, 10, 9, 10, 11, 10, 11, 12, 11, 12, 13, 12, 13, 14, 13, 14, 15, 14, 15, 16, 15, 16, 16]),
                            np.array([4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 12]))
     return (tmp_train, tmp_test)
+
+def rotation_index(mat, times_early=[4], times_late=[6]):
+    ## currently; assume square of early/late. Alternatively, ask for 2 tuples
+    times_early = np.array(times_early)
+    times_late = np.array(times_late)
+    assert times_early.ndim == 1 and times_late.ndim == 1
+    ## assume symmetric matix; otherwise it would be wise to build a test to make sure early/late : x/y axis is correct
+    mat_nonnan = mat[np.logical_not(np.isnan(mat))]
+    assert np.allclose(mat_nonnan, mat_nonnan.T, atol=1e-5), 'ERROR: matrix is not symmetric'
+    n_te = len(times_early)
+    n_tl = len(times_late)
+    elements_cross = np.zeros(int(n_te * n_tl))
+    elements_early = np.zeros(n_te + n_tl)
+
+    i_cross = 0 
+    for i_tau, tau in enumerate(times_early):
+        elements_early[i_tau] = mat[tau, tau]  # auto temp during early 
+        for i_t, t in enumerate(times_late):
+            elements_cross[i_cross] = mat[tau, t]  # get square
+            i_cross += 1
+    for i_t, t in enumerate(times_late):
+        assert elements_early[i_tau + i_t + 1] == 0  # not used
+        assert (i_tau + i_t + 1) < len(elements_early)
+        elements_early[i_tau + i_t] = mat[t, t]
+    rot = np.mean(elements_cross) / np.mean(elements_early)
+    return rot
+    
