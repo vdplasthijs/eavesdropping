@@ -257,9 +257,9 @@ def plot_decoder_crosstemp_perf(score_matrix, ax=None, ticklabels='', cmap_hm = 
         plt.savefig(fig_name, bbox_inches='tight')
     return (ax, hm)
 
-def plot_raster_trial_average(forw, ax=None, save_fig=False, reverse_order=False, 
+def plot_raster_trial_average(forw, ax=None, save_fig=False, reverse_order=False,
                               c_bar=True, ol=None, time_axis_labels=None,
-                              fig_name='figures/example_high_forward_difference.pdf', 
+                              fig_name='figures/example_high_forward_difference.pdf',
                               index_label=0, plot_mnm=False, plot_correlation=False):
     if plot_mnm:
         labels_use_1 = np.array([x == '11' or x == '22' for x in forw['labels_train']])  # expected / match
@@ -291,7 +291,7 @@ def plot_raster_trial_average(forw, ax=None, save_fig=False, reverse_order=False
     th = np.max(np.abs(plot_diff)) # threshold for visualisation
     if time_axis_labels is None:
         time_axis_labels = double_time_labels_blank[:-1]
-    assert len(time_axis_labels) == plot_diff.shape[0]  
+    assert len(time_axis_labels) == plot_diff.shape[0]
     if plot_correlation is False:
         sns.heatmap(plot_diff.T, cmap=plot_cmap, vmin=-1 * th, vmax=th, ax=ax,
                         xticklabels=time_axis_labels, cbar=c_bar)
@@ -304,8 +304,8 @@ def plot_raster_trial_average(forw, ax=None, save_fig=False, reverse_order=False
         ## first two are before stim so correlation is just rnn noise
         corr_mat[:2, :] = np.nan
         corr_mat[:, :2] = np.nan
-        
-        sns.heatmap(corr_mat, cmap='BrBG', ax=ax, xticklabels=time_axis_labels, yticklabels=time_axis_labels, 
+
+        sns.heatmap(corr_mat, cmap='BrBG', ax=ax, xticklabels=time_axis_labels, yticklabels=time_axis_labels,
                     cbar=c_bar, vmin=-1, vmax=1)
         ax.set_yticklabels(rotation=90, labels=ax.get_yticklabels())
         ax.set_ylabel('Time')
@@ -1486,7 +1486,7 @@ def plot_sa_convergence(sim_an_folder, pred_folder, mnm_folder, figsize=(6, 4)):
     return fig
 
 
-def plot_compare_early_late_beta(early_folder='models/75-25_SplitLoss_Xmodels/1000epochs/', 
+def plot_compare_early_late_beta(early_folder='models/75-25_SplitLoss_Xmodels/1000epochs/',
                                  late_folder='models/75-25_late-beta_Xmodels/', ax=None):
 
     if ax is None:
@@ -1501,7 +1501,7 @@ def plot_compare_early_late_beta(early_folder='models/75-25_SplitLoss_Xmodels/10
     ## late beta
     _ = plot_split_perf(rnn_folder=late_folder, list_top=['pred', 'C'], lw=5,
                             linestyle_custom_dict={'pred': '-', 'C': '-'}, colour_custom_dict={'pred': '#0041ab', 'C': '#4b85e3'},
-                            ax_top=ax, ax_bottom=None, plot_bottom=False, 
+                            ax_top=ax, ax_bottom=None, plot_bottom=False,
                             label_dict_keys={'pred': r'$H_{Pred}$' + f'    (Pred-only, N={len_data_files("models/75-25_late-beta_Xmodels/")})',
                                              'C': r'$H_C$' + ' only'})
     ax.text(s=r'$A_{\alpha} \; \to \; B_{\alpha} \; \to \; C_{\beta} \; \to \; D$', x=20, y=0.95, c='#ed0505')
@@ -1526,9 +1526,9 @@ def plot_explore_one_rnn(rnn, plot_mnm_matrix=True, decoder_type='LDA'):
         time_axis_labels[11] = 'D'
         time_axis_labels[10] = 'D'
     else:
-        time_axis_labels = double_time_labels_blank[:-1] 
+        time_axis_labels = double_time_labels_blank[:-1]
 
-    _, __, forw  = bp.train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5, 
+    _, __, forw  = bp.train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
                                                     sparsity_c=0.1, bool_train_decoder=True,
                                                     late_beta=late_beta, decoder_type=decoder_type)
 
@@ -1540,25 +1540,25 @@ def plot_explore_one_rnn(rnn, plot_mnm_matrix=True, decoder_type='LDA'):
     gs_decoding = fig.add_gridspec(ncols=3, nrows=1, left=0.05, right=0.95,
                                 top=0.25, bottom=0.05, wspace=0.4, hspace=0)
     ax_alpha = fig.add_subplot(gs_rasters[0])
-    ol = plot_raster_trial_average(forw=forw, ax=ax_alpha, index_label=0, 
+    ol = plot_raster_trial_average(forw=forw, ax=ax_alpha, index_label=0,
                                    time_axis_labels=time_axis_labels)
     ax_alpha.set_title('Alpha')
 
     ax_beta = fig.add_subplot(gs_rasters[1])
-    ol = plot_raster_trial_average(forw=forw, ax=ax_beta, index_label=1, ol=ol, 
+    ol = plot_raster_trial_average(forw=forw, ax=ax_beta, index_label=1, ol=ol,
                                    time_axis_labels=time_axis_labels)
     ax_beta.set_title('beta')
 
     if plot_mnm_matrix:
         ax_mnm = fig.add_subplot(gs_rasters[2])
-        ol = plot_raster_trial_average(forw=forw, ax=ax_mnm, plot_mnm=True, ol=ol, 
+        ol = plot_raster_trial_average(forw=forw, ax=ax_mnm, plot_mnm=True, ol=ol,
                                    time_axis_labels=time_axis_labels)
         ax_mnm.set_title('mnm')
 
 
 
     ax_corr = fig.add_subplot(gs_plots[0])
-    ol = plot_raster_trial_average(forw=forw, ax=ax_corr, index_label=0, ol=ol, 
+    ol = plot_raster_trial_average(forw=forw, ax=ax_corr, index_label=0, ol=ol,
                                    time_axis_labels=time_axis_labels, plot_correlation=True)
     ax_corr.set_title('alpha correlation')
 
@@ -1597,15 +1597,15 @@ def plot_explore_one_rnn(rnn, plot_mnm_matrix=True, decoder_type='LDA'):
     decoder_weight_mat = np.zeros((rnn.info_dict['n_nodes'], len(time_axis_labels)))
     for tp in range(decoder_weight_mat.shape[1]):
         if decoder_type == 'LDA':
-            decoder_weight_mat[:, tp] = np.squeeze(rnn.decoder_dict['alpha'][tp].means_[1, :] - 
+            decoder_weight_mat[:, tp] = np.squeeze(rnn.decoder_dict['alpha'][tp].means_[1, :] -
                                                 rnn.decoder_dict['alpha'][tp].means_[0, :])[ol]
         elif decoder_type == 'logistic_regression':
             decoder_weight_mat[:, tp] = np.squeeze(rnn.decoder_dict['alpha'][tp].coef_)[ol]
-    
+
     ax_decoder_alpha_weights = fig.add_subplot(gs_decoding[1])
-    sns.heatmap(decoder_weight_mat, 
+    sns.heatmap(decoder_weight_mat,
                 ax=ax_decoder_alpha_weights,
-                cmap='coolwarm', xticklabels=time_axis_labels, 
+                cmap='coolwarm', xticklabels=time_axis_labels,
                 vmax=np.max(np.abs(decoder_weight_mat)),
                 vmin=-1*np.max(np.abs(decoder_weight_mat)))
     ax_decoder_alpha_weights.invert_yaxis()
@@ -1622,7 +1622,7 @@ def plot_explore_one_rnn(rnn, plot_mnm_matrix=True, decoder_type='LDA'):
     ax_beta_dec = fig.add_subplot(gs_decoding[2])
     ## If beta has not yet been trained:
     # if 'beta' not in rnn.decoding_crosstemp_score.keys():
-    _, __, ___  = bp.train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5, 
+    _, __, ___  = bp.train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
                                                 sparsity_c=0.1, bool_train_decoder=True,
                                                 late_beta=late_beta, label='beta',
                                                 decoder_type=decoder_type)
@@ -1630,4 +1630,3 @@ def plot_explore_one_rnn(rnn, plot_mnm_matrix=True, decoder_type='LDA'):
                             ax=ax_beta_dec, c_bar=True, fontsize_ticks=8,
                             ticklabels=time_axis_labels, v_max=1)
     ax_beta_dec.set_title('beta decoding accuracy')#, weight='bold')
-

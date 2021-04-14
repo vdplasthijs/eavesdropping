@@ -19,12 +19,12 @@ import sklearn.svm, sklearn.model_selection, sklearn.discriminant_analysis
 # import rot_utilities as ru
 
 
-def generate_synt_data_general(n_total=100, t_delay=2, t_stim=2, 
+def generate_synt_data_general(n_total=100, t_delay=2, t_stim=2,
                                ratio_train=0.8, ratio_exp=0.75,
                                noise_scale=0.05, late_s2=False,
                                nature_stim='onehot', task='dmc'):
     '''Generate synthetic data
-    
+
     nature_stim: onehot, periodic, tuning
     task: dms, dmc, dmrs, dmrc, discr'''
     assert late_s2 is False, 'Late beta not implemented'
@@ -37,11 +37,11 @@ def generate_synt_data_general(n_total=100, t_delay=2, t_stim=2,
     pd['ratio_exp'], pd['ratio_unexp'] = ratio_exp / (ratio_exp + pd['ratio_unexp'] ),  pd['ratio_unexp'] / (ratio_exp + pd['ratio_unexp'])
     assert pd['ratio_exp'] + pd['ratio_unexp'] == 1
     pd['n_exp_half'] = int(np.round(pd['ratio_exp'] * pd['n_half_total']))
-    
-    pd['n_input'] = 6 
+
+    pd['n_input'] = 6
     pd['n_times'] = int(4 * t_delay + 3 * t_stim)
     pd['period'] = int(t_delay + t_stim)
-    pd['t_delay'] = t_delay 
+    pd['t_delay'] = t_delay
     pd['t_stim'] = t_stim
     pd['slice_s1'] = slice(pd['t_delay'], (pd['t_delay'] + pd['t_stim']))
     pd['slice_s2'] = slice((2 * pd['t_delay'] + pd['t_stim']), (2 * pd['t_delay'] + 2 * pd['t_stim']))
@@ -52,7 +52,7 @@ def generate_synt_data_general(n_total=100, t_delay=2, t_stim=2,
     for i_delay in range(4):  # 4 delay periods
         all_seq[:, :, 0][:, (i_delay * pd['period']):(i_delay * pd['period'] + t_delay)] = 1
     all_seq[:, :, 5][:, (3 * t_delay + 2 * t_stim):(3 * t_delay + 3 * t_stim)] = 1  # Go cue
-    ## First fill in sequence of trials, shuffle later 
+    ## First fill in sequence of trials, shuffle later
     if nature_stim == 'onehot':
         all_seq, labels = fill_onehot_trials(all_seq=all_seq, labels=labels, task=task, pd=pd)
     elif nature_stim == 'periodic':
@@ -62,11 +62,11 @@ def generate_synt_data_general(n_total=100, t_delay=2, t_stim=2,
     else:
         print(f'{nature_stim} not recognised - exiting')
         return None
-    
+
     n_train = int(ratio_train * pd['n_total'])
     n_test = pd['n_total'] - n_train
     assert n_train + n_test == pd['n_total']
-    
+
     ## Train/test data:
     sss = sklearn.model_selection.StratifiedShuffleSplit(n_splits=1, train_size=ratio_train).split(X=np.zeros_like(labels),
                                                                                  y=labels) # stratified split
@@ -75,31 +75,31 @@ def generate_synt_data_general(n_total=100, t_delay=2, t_stim=2,
     labels_train = labels[train_inds]
     test_seq = all_seq[test_inds, :, :]
     labels_test = labels[test_inds]
-    
-    ## 
+
+    ##
     x_train = train_seq[:, :-1, :] + (np.random.randn(n_train, pd['n_times'] - 1, pd['n_input']) * noise_scale)  # add noise to input
     x_test = test_seq[:, :-1, :] + (np.random.randn(n_test, pd['n_times'] - 1, pd['n_input']) * noise_scale)
     y_train_pred = train_seq[:, 1:, :]  # do not add noise to output
     y_test_pred = test_seq[:, 1:, :]
-    
+
     y_train = np.zeros((y_train_pred.shape[0], y_train_pred.shape[1], y_train_pred.shape[2] + 2))
     y_test = np.zeros((y_test_pred.shape[0], y_test_pred.shape[1], y_test_pred.shape[2] + 2))
     y_train[:, :, :pd['n_input']] = y_train_pred  # prediction task target
     y_test[:, :, :pd['n_input']] = y_test_pred
-    
+
     assert y_test.shape[0] == len(labels_test)
     slice_go_output = slice((3 * pd['t_delay'] + 2 * pd['t_stim'] - 1), (3 * pd['t_delay'] + 3 * pd['t_stim'] - 1))  # -1 b/c output is one time step ahaead from input
-    if task == 'dms' or task == 'dmc':  # determine matches & non matches 
+    if task == 'dms' or task == 'dmc':  # determine matches & non matches
         match_train = np.where(np.array([x[0] == x[1] for x in labels_train]))[0]
         nonmatch_train = np.where(np.array([x[0] != x[1] for x in labels_train]))[0]
         y_train[match_train, slice_go_output, 6] = 1
         y_train[nonmatch_train, slice_go_output, 7] = 1
-        
+
         match_test = np.where(np.array([x[0] == x[1] for x in labels_test]))[0]
         nonmatch_test = np.where(np.array([x[0] != x[1] for x in labels_test]))[0]
         y_test[match_test, slice_go_output, 6] = 1
         y_test[nonmatch_test, slice_go_output, 7] = 1
-    
+
     x_train, y_train, x_test, y_test = map(
         torch.tensor, (x_train, y_train, x_test, y_test))  # create tensors
     x_train, y_train, x_test, y_test = x_train.float(), y_train.float(), x_test.float(), y_test.float()  # need to be float type (instead of 'double', which is somewhat silly)
@@ -113,16 +113,16 @@ def fill_onehot_trials(all_seq=None, labels=None, task='dmc', pd=None):
         n_cat = 2
     else:
         assert False, f'{task} not implement for onehot'
-    
+
     if n_cat == 2:
         all_seq[:pd['n_half_total'], :, 1][:, pd['slice_s1']] = 1  # A1
         all_seq[pd['n_half_total']:, :, 2][:, pd['slice_s1']] = 1  # A2
-    
+
         if task == 'dmc':
             add_task = 2
         elif task == 'dms':
             add_task = 0
-    
+
         all_seq[:pd['n_exp_half'], :, (1 + add_task)][:, pd['slice_s2']] = 1  # exp C1
         labels[:pd['n_exp_half']] = '11'
         all_seq[pd['n_exp_half']:pd['n_half_total'], :, (2 + add_task)][:, pd['slice_s2']] = 1  #unexp C2
@@ -131,24 +131,24 @@ def fill_onehot_trials(all_seq=None, labels=None, task='dmc', pd=None):
         labels[pd['n_half_total']:(pd['n_half_total'] + pd['n_exp_half'])] = '22'
         all_seq[(pd['n_half_total'] + pd['n_exp_half']):, :, (1 + add_task)][:, pd['slice_s2']] = 1  # unexp C1
         labels[(pd['n_half_total'] + pd['n_exp_half']):] = '21'
-    
+
     elif n_cat == 4:
         assert task == 'dms'
         assert False, 'not implemented'
-    
+
     return all_seq, labels
 
 
 class RNN_MTL(nn.Module):
     def __init__(self, n_nodes, task='pred_only', init_std_scale=0.1):
-        '''RNN Model with input/hidden/output layers. Fully connected. 
-        
+        '''RNN Model with input/hidden/output layers. Fully connected.
+
         Terminology:
-        pred = prediction task 
-        spec = specialisation task 
-        pred_only = network that only solves prediction task 
-        spec_only = .. 
-        pred_spec = network that does both 
+        pred = prediction task
+        spec = specialisation task
+        pred_only = network that only solves prediction task
+        spec_only = ..
+        pred_spec = network that does both
         spec in {dms, dmc, dmrs, dmrc, discr}
         '''
         super().__init__()
@@ -159,29 +159,30 @@ class RNN_MTL(nn.Module):
         self.n_nodes = n_nodes
         self.init_std_scale = init_std_scale
         self.task = task
-        self.info_dict = {'converged': False, 'task': task}  # any info can be saved later
+        self.info_dict = {'converged': False, 'task': task, 'output_nonlin_pred': 'none',
+                          'output_nonlin_spec': 'relu'}  # any info can be saved later
         task_names = self.task.split('_')
         assert len(task_names) == 2
         if task_names[1] != 'only':
             assert task_names[0] == 'pred'
         if 'pred' in task_names:
-            self.train_pred_task = True 
+            self.train_pred_task = True
         else:
             self.train_pred_task = False
         for spec_name in ['dms', 'dmc', 'dmrs', 'dmrc', 'discr']:
             if spec_name in task_names:  ## there can only be 1 due to asserts above
                 self.info_dict['spec_task_name'] = spec_name
-                self.train_spec_task = True 
-                break 
+                self.train_spec_task = True
+                break
             else:
                 self.train_spec_task = False
-    
+
         ## Linear combination layers:
-        ## initialised uniformly from U(-K, K) where K = sqrt(1/n_input)  by default  
+        ## initialised uniformly from U(-K, K) where K = sqrt(1/n_input)  by default
         self.lin_input = nn.Linear(self.n_input, self.n_nodes)
         self.lin_feedback = nn.Linear(self.n_nodes, self.n_nodes)
         self.lin_output = nn.Linear(self.n_nodes, self.n_output)
-        # if self.train_pred_task is False:  # set output weight that should not be used to 0 to prevent unnecessary regularisaiton loss 
+        # if self.train_pred_task is False:  # set output weight that should not be used to 0 to prevent unnecessary regularisaiton loss
         #     self.lin_output.weight[:, :self.n_input] = 0
         # if self.train_spec_task is False:
         #     self.lin_output.weight[:, self.n_input:] = 0
@@ -192,7 +193,7 @@ class RNN_MTL(nn.Module):
         self.test_loss_arr = []
         self.test_loss_ratio_reg = []
         if self.train_pred_task:
-            self.test_loss_split = {x: [] for x in ['pred', 'S2', 'G', 'G1', 'G2', 
+            self.test_loss_split = {x: [] for x in ['pred', 'S2', 'G', 'G1', 'G2',
                                                     '0', '0_postS1', '0_postS2', '0_postG']}
         else:
             self.test_loss_split = {}
@@ -204,7 +205,7 @@ class RNN_MTL(nn.Module):
 
         ## Automatic:
         self.__datetime_created = datetime.datetime.now()
-        self.__version__ = '0.1'
+        self.__version__ = '1.0'
         self.__git_repo__ = git.Repo(search_parent_directories=True)
         self.__git_branch__ = self.__git_repo__.head.reference.name
         self.__git_commit__ = self.__git_repo__.head.object.hexsha
@@ -222,7 +223,7 @@ class RNN_MTL(nn.Module):
 
     def init_state(self):
         '''Initialise hidden state to random values N(0, 0.1)'''
-        self.state = torch.randn(self.n_nodes) * self.init_std_scale  # initialise s_{-1}    
+        self.state = torch.randn(self.n_nodes) * self.init_std_scale  # initialise s_{-1}
 
     def forward(self, inp, rnn_state=None):
         '''Perform one forward step given input and hidden state. If hidden state
@@ -235,8 +236,18 @@ class RNN_MTL(nn.Module):
 
         linear_output = self.lin_output(new_state.squeeze())
         output = torch.zeros_like(linear_output)  # we will normalise the prediction task & specialisation task separately:
-        output[:self.n_input] = F.softmax(F.relu(linear_output[:self.n_input]), dim=0)  # output nonlin-lin of the prediction task (normalised on these only )
-        output[self.n_input:] = F.softmax(F.relu(linear_output[self.n_input:]), dim=0)  # probabilities units for M and NM (normalised)
+        if self.info_dict['output_nonlin_pred'] == 'none':
+            output[:self.n_input] = F.softmax(linear_output[:self.n_input], dim=0)  # output nonlin-lin of the prediction task (normalised on these only )
+        elif self.info_dict['output_nonlin_pred'] == 'relu':
+            output[:self.n_input] = F.softmax(F.relu(linear_output[:self.n_input]), dim=0)  # output nonlin-lin of the prediction task (normalised on these only )
+        else:
+            assert False, 'output nonlinearity not defined'
+        if self.info_dict['output_nonlin_spec'] == 'none':
+            output[self.n_input:] = F.softmax(linear_output[self.n_input:], dim=0) 
+        elif self.info_dict['output_nonlin_spec'] == 'relu':
+            output[self.n_input:] = F.softmax(F.relu(linear_output[self.n_input:]), dim=0)  # probabilities units for M and NM (normalised)
+        else:
+            assert False, 'output nonlinearly not defined'
         return new_state, output
 
     def set_info(self, param_dict):
@@ -267,17 +278,20 @@ class RNN_MTL(nn.Module):
         pickle.dump(self, file_handle)
         if verbose > 0:
             print(f'RNN-MTL model saved as {self.file_name}')
-            
+
 def prediction_loss(y_est, y_true, model, eval_times=np.array([3, 4, 5, 6, 7, 8, 9, 10, 11, 12])):
     '''Compute Cross Entropy of given time array eval_times.'''
     # assert not (simulated_annealing and mnm_only), f'cannot do mnm only and SA simultaneously. sa = {simulated_annealing}, mnm = {mnm_only}'
     assert model.train_pred_task
+    assert y_est.shape == y_true.shape
+    assert y_est.shape[1] == 13
     y_est_trunc = y_est[:, eval_times, :][:, :, :model.n_input]  # only evaluated these time points, cut off at n_input, because spec task follows after
     y_true_trunc = y_true[:, eval_times, :][:, :, :model.n_input]
+    assert y_true_trunc.mean() == 1 / model.n_input  # make sure these are the right time points
     n_samples = y_true.shape[0]
     ce = torch.sum(-1 * y_true_trunc * torch.log(y_est_trunc)) / n_samples  # take the mean CE over samples
     return ce
-    
+
 def regularisation_loss(model, reg_param=None):  # default 0.001
     '''Compute L1 norm of all model parameters'''
     if reg_param is None:
@@ -286,18 +300,21 @@ def regularisation_loss(model, reg_param=None):  # default 0.001
     params = [pp for pp in model.parameters()]  # for all weight (matrices) in the model
     for _, p_set in enumerate(params):
         reg_loss += reg_param * p_set.norm(p=1)
-    return reg_loss 
-    
+    return reg_loss
+
 def specialisation_loss(y_est, y_true, model, eval_times=np.array([9, 10])):
     '''Compute Cross Entropy of given time array eval_times.'''
     # assert not (simulated_annealing and mnm_only), f'cannot do mnm only and SA simultaneously. sa = {simulated_annealing}, mnm = {mnm_only}'
     assert model.train_spec_task
+    assert y_est.shape == y_true.shape
+    assert y_est.shape[1] == 13
     y_est_trunc = y_est[:, eval_times, :][:, :, model.n_input:]  # only evaluated these time points, cut off at n_input, because spec task follows after
     y_true_trunc = y_true[:, eval_times, :][:, :, model.n_input:]
+    assert y_true_trunc.mean() == 0.5  # make sure these are the right time points
     n_samples = y_true.shape[0]
     ce = torch.sum(-1 * y_true_trunc * torch.log(y_est_trunc)) / n_samples  # take the mean CE over samples
     return ce
-    
+
 def total_loss(y_est, y_true, model):
     if model.train_pred_task:
         pred_loss = prediction_loss(y_est=y_est, y_true=y_true, model=model)
@@ -308,36 +325,39 @@ def total_loss(y_est, y_true, model):
     else:
         spec_loss = 0
     reg_loss = regularisation_loss(model=model)
-    total_loss = pred_loss + spec_loss + reg_loss 
-    ratio_reg = reg_loss / total_loss 
+    total_loss = pred_loss + spec_loss + reg_loss
+    ratio_reg = reg_loss / total_loss
     return total_loss, ratio_reg
-    
+
 def test_loss_append_split(y_est, y_true, model, time_prediction_array_dict=None, late_s2=False):
     if model.train_pred_task:
         if time_prediction_array_dict is None and late_s2 is False:
-            time_prediction_array_dict={'S2': [5, 6], 'G': [9, 10], 'G1': [9], 'G2': [10], 
+            time_prediction_array_dict={'S2': [5, 6], 'G': [9, 10], 'G1': [9], 'G2': [10],
                                         '0': [3, 4, 7, 8, 11, 12], '0_postS1': [3, 4],
                                         '0_postS2': [7, 8], '0_postG': [11, 12]}
         elif time_prediction_array_dict is None and late_s2 is True:
             assert False, 'late beta not implemented'
         assert time_prediction_array_dict is not None and type(time_prediction_array_dict) == dict
-        
+
         for key, eval_times in time_prediction_array_dict.items():  # compute separate times separately
             ce = prediction_loss(y_est=y_est, y_true=y_true, model=model, eval_times=eval_times)
             model.test_loss_split[key].append(float(ce.detach().numpy()))  # add to model
 
-    reg_loss = regularisation_loss(model=model, reg_param=None)  # default uses model param 
+        ce = prediction_loss(y_est=y_est, y_true=y_true, model=model)  # full prediction error
+        model.test_loss_split['pred'].append(float(ce.detach().numpy()))  # add to model
+
+    reg_loss = regularisation_loss(model=model, reg_param=None)  # default uses model param
     model.test_loss_split['L1'].append(float(reg_loss.detach().numpy()))  # add to array
-    
+
     if model.train_spec_task:
         spec_loss = specialisation_loss(y_est=y_est, y_true=y_true, model=model)
         task_name = model.info_dict['spec_task_name']
-        model.test_loss_split[task_name].append(float(reg_loss.detach().numpy()))  # add to array
-        
+        model.test_loss_split[task_name].append(float(spec_loss.detach().numpy()))  # add to array
+
     tot_loss, ratio_reg = total_loss(y_est=y_est, y_true=y_true, model=model)
     model.test_loss_arr.append(float(tot_loss.detach().numpy()))
     model.test_loss_ratio_reg.append(float(ratio_reg.detach().numpy()))
-    
+
 
 # def dmc_loss(y_est, model,label=None, match_times=[13, 14], mnm_loss_separate=False):
 #     ''' Compute loss of MNM task'''
@@ -424,7 +444,7 @@ def bptt_training(rnn, optimiser, dict_training_params,
                     rnn.train_loss_arr.append(float(train_loss.detach().numpy()))
 
                     full_test_pred = compute_full_pred(model=rnn, input_data=x_test)
-                    test_loss_append_split(y_est=full_test_pred, y_true=y_test, model=rnn)  # append loss within function 
+                    test_loss_append_split(y_est=full_test_pred, y_true=y_test, model=rnn)  # append loss within function
 
                     ## Inspect training loss for convergence
                     new_loss = rnn.train_loss_arr[epoch]
@@ -465,11 +485,11 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/',
         for nn in range(n_simulations):
             print(f'\n-----------\nsimulation {nn}/{n_simulations}')
             ## Generate data:
-            tmp0, tmp1 = generate_synt_data_general(n_total=d_dict['n_total'], t_delay=d_dict['t_delay'], t_stim=d_dict['t_stim'], 
+            tmp0, tmp1 = generate_synt_data_general(n_total=d_dict['n_total'], t_delay=d_dict['t_delay'], t_stim=d_dict['t_stim'],
                                         ratio_train=d_dict['ratio_train'], ratio_exp=d_dict['ratio_exp'],
                                         noise_scale=d_dict['noise_scale'], late_s2=False,
                                         nature_stim=nature_stim, task=type_task)
-                    
+
             x_train, y_train, x_test, y_test = tmp0
             labels_train, labels_test = tmp1
 
@@ -480,12 +500,12 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/',
             rnn.info_dict['type_task'] = type_task
             rnn.info_dict['train_task'] = train_task
             rnn.info_dict['late_s2'] = late_s2
-            
+
             ## Train with BPTT
             rnn = bptt_training(rnn=rnn, optimiser=opt, dict_training_params=t_dict,
                                 x_train=x_train, x_test=x_test, y_train=y_train, y_test=y_test,
                                 verbose=0, late_s2=late_s2)
-                                
+
             # ## Decode cross temporally
             # score_mat, decoder_dict, _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
             #                                                 n_samples=None, ratio_train=0.8, verbose=False,
@@ -496,26 +516,3 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/',
         return rnn  # return latest
     except KeyboardInterrupt:
         print('KeyboardInterrupt, exit')
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
