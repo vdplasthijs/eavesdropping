@@ -888,3 +888,58 @@ def aggregate_weights(model_folder='models/', weight='U', check_info_dict=True, 
             prev_name = mn
             f.close()
         return weight_mat
+
+def save_pearson_corr(rnn, representation='alpha', set_nans=True):
+    assert representation == 'alpha' or representation == 'beta' or representation == 'mnm'
+    if 'late_beta' in rnn.info_dict.keys():
+        late_beta = rnn.info_dict['late_beta']
+    else:
+        late_beta = False
+
+    ## get forward activity
+    _, __, forw  = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5, 
+                                                 sparsity_c=0.1, bool_train_decoder=False,
+                                                 late_beta=late_beta)
+
+
+    if representation == 'mnm':
+        labels_use_1 = np.array([x == '11' or x == '22' for x in forw['labels_train']])  # expected / match
+        labels_use_2 = np.array([x == '21' or x == '12' for x in forw['labels_train']])  # unexpected / non match
+    elif representation == 'alpha':
+        labels_use_1 = np.array([x[0] == '1' for x in forw['labels_train']])
+        labels_use_2 = np.array([x[0] == '2' for x in forw['labels_train']])
+    elif representation == 'beta':
+        labels_use_1 = np.array([x[1] == '1' for x in forw['labels_train']])
+        labels_use_2 = np.array([x[1] == '2' for x in forw['labels_train']])
+    
+    plot_diff = (forw['train'][labels_use_1, :, :].mean(0) - forw['train'][labels_use_2, :, :].mean(0))
+    corr_mat = np.corrcoef(plot_diff)
+    assert corr_mat.shape[0] == corr_mat.shape[1] and corr_mat.shape[0] == 17
+
+    if set_nans:
+        if representation == 'alpha':
+            # assert time_axis_labels[0] == '' and time_axis_labels[1] == ''
+            ## first two are before stim so correlation is just rnn noise
+            corr_mat[:2, :] = np.nan
+            corr_mat[:, :2] = np.nan
+        elif representation == 'beta' or representation == 'mnm':
+            assert False, 'ERROR: beta & mnm NaN setting not impelemtns yet'
+            ## late_beta dependence
+        
+    if hasattr(rnn, 'rep_corr_mat_dict') is False:
+        rnn.rep_corr_mat_dict = {}
+    rnn.rep_corr_mat_dict[representation] = corr_mat
+    return corr_mat
+
+def save_pearson_corr_folder(rnn_folder, representation='alpha', set_nans=True,
+                             save_to_file=False):
+    rnn_list = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
+    for i_rnn, rnn_name in tqdm(enumerate(rnn_list)):
+        ## Load RNN:
+        with open(rnn_folder + rnn_name, 'rb') as f:
+            rnn = pickle.load(f)
+        save_pearson_corr(rnn=rnn, representation=representation,
+                          set_nans=set_nans)
+        if save_to_file:
+            rnn.save_model(folder=rnn_folder, verbose=0)  # save results to file
+    print('done!')
