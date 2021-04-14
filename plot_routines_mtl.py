@@ -51,7 +51,7 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
         list_rnns = [rnn_name]
     else:
         list_rnns = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
-    print(label_dict_keys)
+    # print(label_dict_keys)
     n_rnn = len(list_rnns)
     for i_rnn, rnn_name in enumerate(list_rnns):
         rnn = ru.load_rnn(rnn_name=os.path.join(rnn_folder, rnn_name))
@@ -67,9 +67,8 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
         else:
             assert rnn.info_dict['n_epochs'] == n_tp
         for key, arr in rnn.test_loss_split.items():
-            # print(i_rnn, key, arr)
-            if key != 'pred':
-                conv_dict[key][i_rnn, :] = arr.copy()
+            # if key != 'pred':
+            conv_dict[key][i_rnn, :] = arr.copy()
                 
         if plot_total:
             conv_dict['pred_sep'][i_rnn, :] = np.sum([conv_dict[key][i_rnn, :] for key in ['0', 'S2', 'G']], 0)
@@ -87,8 +86,10 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
     for key in dict_keys:
         mat = conv_dict[key]
         if normalise_start:
-            mat = mat / mat[:, 0][:, np.newaxis]
+            mat = mat / np.mean(mat[:, 0])#[:, np.newaxis]
         plot_arr = np.mean(mat, 0)
+        # if normalise_start:
+        #     plot_arr = plot_arr / plot_arr[0]
         if plot_top:
             if (list_top is not None and key in list_top) or (list_top is None and '_' not in key and 'L' not in key):
                 # print(key)
@@ -118,31 +119,31 @@ def len_data_files(dir_path):
     return len([x for x in os.listdir(dir_path) if x[-5:] == '.data'])
 
 def plot_split_perf_custom(folder_pred, folder_dmcpred, folder_dmc, ax=None,
-                           plot_legend=True, legend_anchor=(1, 1)):
+                           plot_legend=True, legend_anchor=(1, 1), task_type='dmc'):
     if ax is None:
         ax = plt.subplot(111)
 
     ## prediction only
     _ = plot_split_perf(rnn_folder=folder_pred, list_top=['pred'], lw=5,
                         linestyle_custom_dict={'pred': '-'}, colour_custom_dict={'pred': [67 / 255, 0, 0]},
-                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': r'$H_{Pred}$' + f'    (Pred-only, N={len_data_files(folder_pred)})'})
+                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': 'H Pred' + f'    (Pred-only, N={len_data_files(folder_pred)})'})
 
     ## dmc only
-    _ = plot_split_perf(rnn_folder=folder_dmc, list_top=['dmc'], lw=5, plot_total=False,
-                        linestyle_custom_dict={'dmc': '-'}, colour_custom_dict={'dmc': [207 / 255, 143 / 255, 23 / 255]},
-                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'dmc': r'$H_{M/NM}$' + f'   (dmc-only, N={len_data_files(folder_dmc)})'})
+    _ = plot_split_perf(rnn_folder=folder_dmc, list_top=[task_type], lw=5, plot_total=False,
+                        linestyle_custom_dict={task_type: '-'}, colour_custom_dict={task_type: [207 / 255, 143 / 255, 23 / 255]},
+                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={task_type: f'H {task_type}' + f'   ({task_type}-only, N={len_data_files(folder_dmc)})'})
 
     ## dmc+ prediction only
     colour_comb = [73 / 255, 154 / 255, 215 / 255]
-    _ = plot_split_perf(rnn_folder=folder_dmcpred, list_top=['pred', 'dmc'], lw=5,
-                        linestyle_custom_dict={'pred': ':', 'dmc': '-'},
-                        colour_custom_dict={'pred': colour_comb, 'dmc': colour_comb},
-                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': r'$H_{Pred}$' + f'    (Pred & dmc,  N={len_data_files(folder_dmcpred)})',
-                                                                                       'dmc': r'$H_{M/NM}$' + f'   (Pred & dmc,  N={len_data_files(folder_dmcpred)})'})
+    _ = plot_split_perf(rnn_folder=folder_dmcpred, list_top=['pred', task_type], lw=5,
+                        linestyle_custom_dict={'pred': ':', task_type: '-'},
+                        colour_custom_dict={'pred': colour_comb, task_type: colour_comb},
+                        ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': f'H Pred' + f'    (Pred & {task_type},  N={len_data_files(folder_dmcpred)})',
+                                                                                       task_type: f'H {task_type}' + f'   (Pred & {task_type},  N={len_data_files(folder_dmcpred)})'})
 
     if plot_legend:
         ax.legend(frameon=False, bbox_to_anchor=legend_anchor)
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
-    ax.set_ylim([-0.2, 1.2])
+    ax.set_ylim([-0.2, 1.6])
     return ax

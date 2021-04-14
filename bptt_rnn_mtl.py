@@ -17,7 +17,7 @@ import pickle, datetime, time, os, sys, git
 from tqdm import tqdm, trange
 import sklearn.svm, sklearn.model_selection, sklearn.discriminant_analysis
 # import rot_utilities as ru
-
+from multiprocessing.dummy import Pool as ThreadPool
 
 def generate_synt_data_general(n_total=100, t_delay=2, t_stim=2,
                                ratio_train=0.8, ratio_exp=0.75,
@@ -243,7 +243,7 @@ class RNN_MTL(nn.Module):
         else:
             assert False, 'output nonlinearity not defined'
         if self.info_dict['output_nonlin_spec'] == 'none':
-            output[self.n_input:] = F.softmax(linear_output[self.n_input:], dim=0) 
+            output[self.n_input:] = F.softmax(linear_output[self.n_input:], dim=0)
         elif self.info_dict['output_nonlin_spec'] == 'relu':
             output[self.n_input:] = F.softmax(F.relu(linear_output[self.n_input:]), dim=0)  # probabilities units for M and NM (normalised)
         else:
@@ -470,7 +470,8 @@ def bptt_training(rnn, optimiser, dict_training_params,
 
 
 
-def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/',
+def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
+                        n_threads=4, save_folder='models/',
                         late_s2=False, nature_stim='onehot', type_task='dmc', train_task='pred_only'):
     assert late_s2 is False, 'not implemented'
     assert type_task in ['dms', 'dmc']
@@ -481,38 +482,78 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, save_folder='models/',
         task_name = f'{type_task}_only'
     elif train_task == 'pred_spec':
         task_name = f'pred_{type_task}'
+
+    def execute_rnn_training(nn):
+        print(f'\n-----------\nsimulation {nn}/{n_simulations}')
+        ## Generate data:
+        tmp0, tmp1 = generate_synt_data_general(n_total=d_dict['n_total'], t_delay=d_dict['t_delay'], t_stim=d_dict['t_stim'],
+                                    ratio_train=d_dict['ratio_train'], ratio_exp=d_dict['ratio_exp'],
+                                    noise_scale=d_dict['noise_scale'], late_s2=False,
+                                    nature_stim=nature_stim, task=type_task)
+
+        x_train, y_train, x_test, y_test = tmp0
+        labels_train, labels_test = tmp1
+
+        ## Initiate RNN model
+        rnn = RNN_MTL(task=task_name, n_nodes=t_dict['n_nodes'])  # Create RNN class
+        opt = torch.optim.SGD(rnn.parameters(), lr=t_dict['learning_rate'])  # call optimiser from pytorhc
+        rnn.set_info(param_dict={**d_dict, **t_dict})
+        rnn.info_dict['type_task'] = type_task
+        rnn.info_dict['train_task'] = train_task
+        rnn.info_dict['late_s2'] = late_s2
+
+        ## Train with BPTT
+        rnn = bptt_training(rnn=rnn, optimiser=opt, dict_training_params=t_dict,
+                            x_train=x_train, x_test=x_test, y_train=y_train, y_test=y_test,
+                            verbose=0, late_s2=late_s2)
+
+        # ## Decode cross temporally
+        # score_mat, decoder_dict, _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
+        #                                                 n_samples=None, ratio_train=0.8, verbose=False,
+        #                                                 late_s2=late_s2)
+
+        ## Save results:
+        rnn.save_model(folder=save_folder)
+
+
+
     try:
-        for nn in range(n_simulations):
-            print(f'\n-----------\nsimulation {nn}/{n_simulations}')
-            ## Generate data:
-            tmp0, tmp1 = generate_synt_data_general(n_total=d_dict['n_total'], t_delay=d_dict['t_delay'], t_stim=d_dict['t_stim'],
-                                        ratio_train=d_dict['ratio_train'], ratio_exp=d_dict['ratio_exp'],
-                                        noise_scale=d_dict['noise_scale'], late_s2=False,
-                                        nature_stim=nature_stim, task=type_task)
-
-            x_train, y_train, x_test, y_test = tmp0
-            labels_train, labels_test = tmp1
-
-            ## Initiate RNN model
-            rnn = RNN_MTL(task=task_name, n_nodes=t_dict['n_nodes'])  # Create RNN class
-            opt = torch.optim.SGD(rnn.parameters(), lr=t_dict['learning_rate'])  # call optimiser from pytorhc
-            rnn.set_info(param_dict={**d_dict, **t_dict})
-            rnn.info_dict['type_task'] = type_task
-            rnn.info_dict['train_task'] = train_task
-            rnn.info_dict['late_s2'] = late_s2
-
-            ## Train with BPTT
-            rnn = bptt_training(rnn=rnn, optimiser=opt, dict_training_params=t_dict,
-                                x_train=x_train, x_test=x_test, y_train=y_train, y_test=y_test,
-                                verbose=0, late_s2=late_s2)
-
-            # ## Decode cross temporally
-            # score_mat, decoder_dict, _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
-            #                                                 n_samples=None, ratio_train=0.8, verbose=False,
-            #                                                 late_s2=late_s2)
-
-            ## Save results:
-            rnn.save_model(folder=save_folder)
-        return rnn  # return latest
+        if use_multiproc:
+            pool = ThreadPool(n_threads)
+            results = pool.map(execute_rnn_training, range(n_simulations))
+        else:
+            for nn in range(n_simulations):
+                execute_rnn_training(nn=nn)
     except KeyboardInterrupt:
         print('KeyboardInterrupt, exit')
+
+
+
+def summary_many(type_task='dmc', train_task='pred_only'):
+    # Data parameters dictionary
+    d_dict = { 'n_total': 1000,  # total number of data sequences
+             'ratio_train': 0.8,
+             'ratio_exp': 0.75,  # probabilities of switching between alpha nd beta
+             'noise_scale': 0.15,
+             't_delay': 2,
+             't_stim': 2}
+
+    ## Set training parameters:
+    t_dict = {}
+    t_dict['n_nodes'] = 20  # number of nodes in the RNN
+    t_dict['learning_rate'] = 0.002  # algorithm lr
+    t_dict['bs'] = 1  # batch size
+    t_dict['n_epochs'] = 40  # training epochs
+    t_dict['l1_param'] = 5e-3  # L1 regularisation in loss function
+    t_dict['check_conv'] = False  # check for convergence (and abort if converged)
+    t_dict['conv_rel_tol'] = 5e-4  # assess convergence by relative difference between two epochs is smaller than this
+
+    if train_task == 'pred_only':
+        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=10, save_folder=f'models/{type_task}_task/onehot/pred_only/',
+                            late_s2=False, nature_stim='onehot', type_task=type_task, train_task='pred_only')
+    elif train_task == 'spec_only':
+        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=10, save_folder=f'models/{type_task}_task/onehot/{type_task}_only/',
+                                late_s2=False, nature_stim='onehot', type_task=type_task, train_task='spec_only')
+    elif train_task == 'pred_spec':
+        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=10, save_folder=f'models/{type_task}_task/onehot/pred_{type_task}/',
+                                late_s2=False, nature_stim='onehot', type_task=type_task, train_task='pred_spec')
