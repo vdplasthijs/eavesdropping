@@ -56,8 +56,10 @@ def generate_synt_data_general(n_total=100, t_delay=2, t_stim=2,
     if nature_stim == 'onehot':
         all_seq, labels = fill_onehot_trials(all_seq=all_seq, labels=labels, task=task, pd=pd)
     elif nature_stim == 'periodic':
-        pass
+        all_seq, labels = fill_periodic_trials(all_seq=all_seq, labels=labels, task=task, pd=pd)
     elif nature_stim == 'tuning':
+        pass
+    elif nature_stim == 'binary':
         pass
     else:
         print(f'{nature_stim} not recognised - exiting')
@@ -139,8 +141,51 @@ def fill_onehot_trials(all_seq=None, labels=None, task='dmc', pd=None):
     return all_seq, labels
 
 
+
+def fill_periodic_trials(all_seq=None, labels=None, task='dmc', pd=None, n_cat=4):
+
+    assert pd['n_total'] % n_cat == 0, 'number of categories not a factor of number of trials'
+    assert task == 'dmc' or task == 'dms'
+    assert n_cat < 10  # to stay within 1 digit with labelling
+
+    ## Create periodic stim by cos & sin of angle
+    rad_stim = np.array([x * 2 * np.pi / n_cat for x in range(n_cat)])
+    cos_stim = np.cos(rad_stim)
+    sin_stim = np.sin(rad_stim)
+
+    if task == 'dmc':
+        add_task = 2
+    elif task == 'dms':
+        add_task = 0
+    n_trials_per_cat = int(np.round(pd['n_total'] / n_cat))
+    n_trials_exp_per_cat = int(np.round(pd['ratio_exp'] * n_trials_per_cat))
+    n_trials_unexp_per_cat = n_trials_per_cat - n_trials_exp_per_cat
+    assert n_trials_exp_per_cat + n_trials_unexp_per_cat == n_trials_per_cat
+
+    ## Fill sequences per S1 category
+    for i_cat in range(n_cat):
+        i_trial = i_cat * n_trials_per_cat
+        i_next_cat_trial = (i_cat + 1) * n_trials_per_cat
+        ## Fill S1
+        all_seq[i_trial:i_next_cat_trial, :, 1][:, pd['slice_s1']] = cos_stim[i_cat]
+        all_seq[i_trial:i_next_cat_trial, :, 2][:, pd['slice_s1']] = sin_stim[i_cat]
+
+        ## Fill S2
+        all_seq[i_trial:(i_trial + n_trials_exp_per_cat), :, (1 + add_task)][:, pd['slice_s2']] = cos_stim[i_cat]  # same stim
+        all_seq[i_trial:(i_trial + n_trials_exp_per_cat), :, (2 + add_task)][:, pd['slice_s2']] = sin_stim[i_cat]
+        labels[i_trial:(i_trial + n_trials_exp_per_cat)] = f'{i_cat}{i_cat}'
+
+        random_cat = np.random.choice(a=np.delete(np.arange(n_cat), i_cat, 0), size=n_trials_unexp_per_cat, replace=True)
+        all_seq[(i_trial + n_trials_exp_per_cat):i_next_cat_trial, :, (1 + add_task)][:, pd['slice_s2']] = np.array([cos_stim[x] for x in random_cat])[:, None]  # different stim
+        all_seq[(i_trial + n_trials_exp_per_cat):i_next_cat_trial, :, (2 + add_task)][:, pd['slice_s2']] = np.array([sin_stim[x] for x in random_cat])[:, None]
+        # labels[(i_trial + n_trials_exp_per_cat):i_next_cat_trial] = [f'{i_cat}{i_random_cat.copy()}' for i_random_cat in random_cat]  # specify other cat
+        labels[(i_trial + n_trials_exp_per_cat):i_next_cat_trial] = [f'{i_cat}x' for i_random_cat in random_cat]  # do not specifiy => best for shuffling with StratifiedShuffleSplit
+
+    return all_seq, labels
+
+
 class RNN_MTL(nn.Module):
-    def __init__(self, n_nodes, task='pred_only', init_std_scale=0.1):
+    def __init__(self, n_nodes=20, nature_stim='onehot', task='pred_dmc', init_std_scale=0.1):
         '''RNN Model with input/hidden/output layers. Fully connected.
 
         Terminology:
@@ -159,8 +204,12 @@ class RNN_MTL(nn.Module):
         self.n_nodes = n_nodes
         self.init_std_scale = init_std_scale
         self.task = task
-        self.info_dict = {'converged': False, 'task': task, 'output_nonlin_pred': 'relu',
-                          'output_nonlin_spec': 'relu'}  # any info can be saved later
+        self.info_dict = {'converged': False, 'task': task, 'output_nonlin_pred': 'softmax',
+                          'output_nonlin_spec': 'softmax_relu', 'pred_loss_function': 'cross_entropy',
+                          'nature_stim': nature_stim}  # any info can be saved later
+        if nature_stim == 'periodic':  # periodic stim are constrained by sum = 1, so softmax & cross-entropy are not applicable
+            self.info_dict['pred_loss_function'] = 'mean_squared_error'  # also like duncker & driscoll 2020 NIPS I believe
+            self.info_dict['output_nonlin_pred'] = 'tanh'  # bound -1 to 1, like cos & sin
         task_names = self.task.split('_')
         assert len(task_names) == 2
         if task_names[1] != 'only':
@@ -236,15 +285,17 @@ class RNN_MTL(nn.Module):
 
         linear_output = self.lin_output(new_state.squeeze())
         output = torch.zeros_like(linear_output)  # we will normalise the prediction task & specialisation task separately:
-        if self.info_dict['output_nonlin_pred'] == 'none':
+        if self.info_dict['output_nonlin_pred'] == 'softmax':
             output[:self.n_input] = F.softmax(linear_output[:self.n_input], dim=0)  # output nonlin-lin of the prediction task (normalised on these only )
-        elif self.info_dict['output_nonlin_pred'] == 'relu':
+        elif self.info_dict['output_nonlin_pred'] == 'softmax_relu':
             output[:self.n_input] = F.softmax(F.relu(linear_output[:self.n_input]), dim=0)  # output nonlin-lin of the prediction task (normalised on these only )
+        elif self.info_dict['output_nonlin_pred'] == 'tanh':
+            output[:self.n_input] = torch.tanh(linear_output[:self.n_input])
         else:
             assert False, 'output nonlinearity not defined'
-        if self.info_dict['output_nonlin_spec'] == 'none':
+        if self.info_dict['output_nonlin_spec'] == 'softmax':
             output[self.n_input:] = F.softmax(linear_output[self.n_input:], dim=0)
-        elif self.info_dict['output_nonlin_spec'] == 'relu':
+        elif self.info_dict['output_nonlin_spec'] == 'softmax_relu':
             output[self.n_input:] = F.softmax(F.relu(linear_output[self.n_input:]), dim=0)  # probabilities units for M and NM (normalised)
         else:
             assert False, 'output nonlinearly not defined'
@@ -279,18 +330,26 @@ class RNN_MTL(nn.Module):
         if verbose > 0:
             print(f'RNN-MTL model saved as {self.file_name}')
 
-def prediction_loss(y_est, y_true, model, eval_times=np.array([3, 4, 5, 6, 7, 8, 9, 10, 11, 12])):
+def prediction_loss(y_est, y_true, model, eval_times=np.array([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]),
+                    loss_function=None):
     '''Compute Cross Entropy of given time array eval_times.'''
     # assert not (simulated_annealing and mnm_only), f'cannot do mnm only and SA simultaneously. sa = {simulated_annealing}, mnm = {mnm_only}'
     assert model.train_pred_task
     assert y_est.shape == y_true.shape
     assert y_est.shape[1] == 13
+    if loss_function is None:
+        loss_function = model.info_dict['pred_loss_function']
     y_est_trunc = y_est[:, eval_times, :][:, :, :model.n_input]  # only evaluated these time points, cut off at n_input, because spec task follows after
     y_true_trunc = y_true[:, eval_times, :][:, :, :model.n_input]
-    assert y_true_trunc.mean() == 1 / model.n_input  # make sure these are the right time points
     n_samples = y_true.shape[0]
-    ce = torch.sum(-1 * y_true_trunc * torch.log(y_est_trunc)) / n_samples  # take the mean CE over samples
-    return ce
+    if loss_function == 'cross_entropy':
+        assert y_true_trunc.sum(2).mean() == 1, y_true_trunc.sum(2).mean() # sum should be 1 to use cross entropy
+        loss = torch.sum(-1 * y_true_trunc * torch.log(y_est_trunc)) / n_samples  # take the mean CE over samples
+    elif loss_function == 'mean_squared_error':
+        # loss_f = nn.MSELoss(reduction='mean')
+        # loss = loss_f(y_true_trunc, y_est_trunc)
+        loss = ((y_true_trunc - y_est_trunc) ** 2).sum() / n_samples
+    return loss
 
 def regularisation_loss(model, reg_param=None):  # default 0.001
     '''Compute L1 norm of all model parameters'''
@@ -310,7 +369,8 @@ def specialisation_loss(y_est, y_true, model, eval_times=np.array([9, 10])):
     assert y_est.shape[1] == 13
     y_est_trunc = y_est[:, eval_times, :][:, :, model.n_input:]  # only evaluated these time points, cut off at n_input, because spec task follows after
     y_true_trunc = y_true[:, eval_times, :][:, :, model.n_input:]
-    assert y_true_trunc.mean() == 0.5  # make sure these are the right time points
+    # assert y_true_trunc.mean() == 0.5  # make sure these are the right time points
+    assert y_true_trunc.sum(2).mean() == 1, y_true_trunc.sum(2).mean()  # sum should be 1 to use cross entropy
     n_samples = y_true.shape[0]
     ce = torch.sum(-1 * y_true_trunc * torch.log(y_est_trunc)) / n_samples  # take the mean CE over samples
     return ce
@@ -495,7 +555,7 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=False,
         labels_train, labels_test = tmp1
 
         ## Initiate RNN model
-        rnn = RNN_MTL(task=task_name, n_nodes=t_dict['n_nodes'])  # Create RNN class
+        rnn = RNN_MTL(task=task_name, nature_stim=nature_stim, n_nodes=t_dict['n_nodes'])  # Create RNN class
         opt = torch.optim.SGD(rnn.parameters(), lr=t_dict['learning_rate'])  # call optimiser from pytorhc
         rnn.set_info(param_dict={**d_dict, **t_dict})
         rnn.info_dict['type_task'] = type_task
