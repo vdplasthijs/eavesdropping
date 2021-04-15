@@ -589,7 +589,7 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=False,
 
 
 
-def summary_many(type_task='dmc', train_task='pred_only'):
+def summary_many(type_task='dmc', train_task='pred_only', nature_stim='onehot'):
     # Data parameters dictionary
     d_dict = {'n_total': 1000,  # total number of data sequences
              'ratio_train': 0.8,
@@ -604,16 +604,16 @@ def summary_many(type_task='dmc', train_task='pred_only'):
     t_dict['learning_rate'] = 0.002  # algorithm lr
     t_dict['bs'] = 1  # batch size
     t_dict['n_epochs'] = 40  # training epochs
-    t_dict['l1_param'] = 5e-3  # L1 regularisation in loss function
+    t_dict['l1_param'] = 1e-4  # L1 regularisation in loss function
     t_dict['check_conv'] = False  # check for convergence (and abort if converged)
     t_dict['conv_rel_tol'] = 5e-4  # assess convergence by relative difference between two epochs is smaller than this
 
     if train_task == 'pred_only':
-        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=10, save_folder=f'models/7525/relu/{type_task}_task/onehot/pred_only/',
-                            late_s2=False, nature_stim='onehot', type_task=type_task, train_task='pred_only')
+        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=10, save_folder=f'models/7525/norelu/{type_task}_task/{nature_stim}/pred_only/',
+                            late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='pred_only')
     elif train_task == 'spec_only':
-        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=10, save_folder=f'models/7525/relu/{type_task}_task/onehot/{type_task}_only/',
-                                late_s2=False, nature_stim='onehot', type_task=type_task, train_task='spec_only')
+        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=10, save_folder=f'models/7525/norelu/{type_task}_task/{nature_stim}/{type_task}_only/',
+                                late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='spec_only')
     elif train_task == 'pred_spec':
-        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=10, save_folder=f'models/7525/relu/{type_task}_task/onehot/pred_{type_task}/',
-                                late_s2=False, nature_stim='onehot', type_task=type_task, train_task='pred_spec')
+        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=10, save_folder=f'models/7525/norelu/{type_task}_task/{nature_stim}/pred_{type_task}/',
+                                late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='pred_spec')
