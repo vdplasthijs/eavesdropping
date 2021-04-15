@@ -159,7 +159,7 @@ class RNN_MTL(nn.Module):
         self.n_nodes = n_nodes
         self.init_std_scale = init_std_scale
         self.task = task
-        self.info_dict = {'converged': False, 'task': task, 'output_nonlin_pred': 'none',
+        self.info_dict = {'converged': False, 'task': task, 'output_nonlin_pred': 'relu',
                           'output_nonlin_spec': 'relu'}  # any info can be saved later
         task_names = self.task.split('_')
         assert len(task_names) == 2
@@ -470,7 +470,7 @@ def bptt_training(rnn, optimiser, dict_training_params,
 
 
 
-def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
+def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=False,
                         n_threads=4, save_folder='models/',
                         late_s2=False, nature_stim='onehot', type_task='dmc', train_task='pred_only'):
     assert late_s2 is False, 'not implemented'
@@ -531,9 +531,9 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
 
 def summary_many(type_task='dmc', train_task='pred_only'):
     # Data parameters dictionary
-    d_dict = { 'n_total': 1000,  # total number of data sequences
+    d_dict = {'n_total': 1000,  # total number of data sequences
              'ratio_train': 0.8,
-             'ratio_exp': 0.5,  # probabilities of switching between alpha nd beta
+             'ratio_exp': 0.75,  # probabilities of switching between alpha nd beta
              'noise_scale': 0.15,
              't_delay': 2,
              't_stim': 2}
@@ -549,11 +549,11 @@ def summary_many(type_task='dmc', train_task='pred_only'):
     t_dict['conv_rel_tol'] = 5e-4  # assess convergence by relative difference between two epochs is smaller than this
 
     if train_task == 'pred_only':
-        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=10, save_folder=f'models/5050/{type_task}_task/onehot/pred_only/',
+        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=10, save_folder=f'models/7525/relu/{type_task}_task/onehot/pred_only/',
                             late_s2=False, nature_stim='onehot', type_task=type_task, train_task='pred_only')
     elif train_task == 'spec_only':
-        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=10, save_folder=f'models/5050/{type_task}_task/onehot/{type_task}_only/',
+        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=10, save_folder=f'models/7525/relu/{type_task}_task/onehot/{type_task}_only/',
                                 late_s2=False, nature_stim='onehot', type_task=type_task, train_task='spec_only')
     elif train_task == 'pred_spec':
-        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=10, save_folder=f'models/5050/{type_task}_task/onehot/pred_{type_task}/',
+        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=10, save_folder=f'models/7525/relu/{type_task}_task/onehot/pred_{type_task}/',
                                 late_s2=False, nature_stim='onehot', type_task=type_task, train_task='pred_spec')
