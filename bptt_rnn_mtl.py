@@ -418,30 +418,6 @@ def test_loss_append_split(y_est, y_true, model, time_prediction_array_dict=None
     model.test_loss_arr.append(float(tot_loss.detach().numpy()))
     model.test_loss_ratio_reg.append(float(ratio_reg.detach().numpy()))
 
-
-# def dmc_loss(y_est, model,label=None, match_times=[13, 14], mnm_loss_separate=False):
-#     ''' Compute loss of MNM task'''
-#     assert match_times is not None, 'no match times defined '
-#     assert label is not None, 'no labels defined'
-#     match_arr = ru.labels_to_mnm(labels=label)  # get M & NM binary rep
-#     match_est = y_est[:, match_times, model.n_input:] # estimates for M, NM
-#     match_arr_full = torch.zeros_like(match_est)  # has to be rescaled because of time axis
-#     for tt in range(len(match_times)):
-#         match_arr_full[:, tt, :] = torch.tensor(match_arr)  # concatenated along time axis
-#     if mnm_loss_separate is False: # if P(M) + P(NM) == 1
-#         ce_match = torch.sum(-1 * match_arr_full * torch.log(match_est)) / n_samples  # take the mean CE over samples
-#     elif mnm_loss_separate:  # if P(M) <= 1 & P(NM) <=1
-#         assert match_est.shape[2] == 2  # (M, NM)
-#         match_only_est = match_est
-#         match_only_est[:, :, 1] = 1 - match_only_est[:, :, 0]
-#         nonmatch_only_est = match_est
-#         nonmatch_only_est[:, :, 0] = 1 - nonmatch_only_est[:, :, 1]
-#         ce_match_only = torch.sum(-1 * match_arr_full * torch.log(match_only_est)) / n_samples
-#         ce_nonmatch_only = torch.sum(-1 * match_arr_full * torch.log(nonmatch_only_est)) / n_samples
-#         ce_match = 0.5 * (ce_match_only + ce_nonmatch_only) # mean
-#     return ce_match
-
-
 def compute_full_pred(input_data, model):
     '''Compute forward prediction of RNN. I.e. given an input series input_data, the
     model (RNN) computes the predicted output series.'''
@@ -453,8 +429,6 @@ def compute_full_pred(input_data, model):
         for tt in range(input_data.shape[1]):  # loop through time
             _, full_pred[kk, tt, :] = model(input_data[kk, tt, :])  # compute prediction at this time
     return full_pred
-
-
 
 def bptt_training(rnn, optimiser, dict_training_params,
                   x_train, x_test, y_train, y_test, verbose=1, late_s2=False):
@@ -589,7 +563,9 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=False,
 
 
 
-def summary_many(type_task='dmc', train_task='pred_only', nature_stim='onehot'):
+def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
+                 train_task_list=['pred_only', 'spec_only', 'pred_spec'],
+                 sparsity_list=[5e-3], n_sim=10):
     # Data parameters dictionary
     d_dict = {'n_total': 1000,  # total number of data sequences
              'ratio_train': 0.8,
@@ -604,16 +580,36 @@ def summary_many(type_task='dmc', train_task='pred_only', nature_stim='onehot'):
     t_dict['learning_rate'] = 0.002  # algorithm lr
     t_dict['bs'] = 1  # batch size
     t_dict['n_epochs'] = 80  # training epochs
-    t_dict['l1_param'] = 1e-4  # L1 regularisation in loss function
     t_dict['check_conv'] = False  # check for convergence (and abort if converged)
     t_dict['conv_rel_tol'] = 5e-4  # assess convergence by relative difference between two epochs is smaller than this
 
-    if train_task == 'pred_only':
-        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=10, save_folder=f'models/7525/norelu/{type_task}_task/{nature_stim}/pred_only/',
-                            late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='pred_only')
-    elif train_task == 'spec_only':
-        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=10, save_folder=f'models/7525/norelu/{type_task}_task/{nature_stim}/{type_task}_only/',
-                                late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='spec_only')
-    elif train_task == 'pred_spec':
-        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=10, save_folder=f'models/7525/norelu/{type_task}_task/{nature_stim}/pred_{type_task}/',
-                                late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='pred_spec')
+    exp_perc = int(d_dict['ratio_exp'] * 100)
+    exp_str = f'{exp_perc}{100 - exp_perc}'
+
+    for sparsity in sparsity_list:
+        t_dict['l1_param'] = sparsity  # L1 regularisation in loss function
+        sci_not_spars = np.format_float_scientific(t_dict['l1_param'], precision=0)
+        sci_not_spars = sci_not_spars[0] + sci_not_spars[2:]  # skip dot
+
+        for nature_stim in nature_stim_list:
+            for type_task in type_task_list:
+                for train_task in train_task_list:
+                    parent_folder = f'models/{exp_str}/{type_task}_task/{nature_stim}/{sci_not_spars}/'
+                    if not os.path.exists(parent_folder):
+                        os.makedirs(parent_folder)
+                        for child_folder in ['pred_only', f'{type_task}_only', f'pred_{type_task}']:
+                            os.makedirs(parent_folder + child_folder)
+                        print(f'Created directory {parent_folder} from {os.getcwd()}')
+
+                    if train_task == 'pred_only':
+                        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
+                                            save_folder=parent_folder + f'pred_only/',
+                                            late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='pred_only')
+                    elif train_task == 'spec_only':
+                        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
+                                            save_folder=parent_folder + f'{type_task}_only/',
+                                            late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='spec_only')
+                    elif train_task == 'pred_spec':
+                        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
+                                            save_folder=parent_folder + f'pred_{type_task}/',
+                                            late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='pred_spec')
