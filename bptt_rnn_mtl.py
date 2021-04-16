@@ -603,7 +603,7 @@ def summary_many(type_task='dmc', train_task='pred_only', nature_stim='onehot'):
     t_dict['n_nodes'] = 20  # number of nodes in the RNN
     t_dict['learning_rate'] = 0.002  # algorithm lr
     t_dict['bs'] = 1  # batch size
-    t_dict['n_epochs'] = 40  # training epochs
+    t_dict['n_epochs'] = 80  # training epochs
     t_dict['l1_param'] = 1e-4  # L1 regularisation in loss function
     t_dict['check_conv'] = False  # check for convergence (and abort if converged)
     t_dict['conv_rel_tol'] = 5e-4  # assess convergence by relative difference between two epochs is smaller than this
