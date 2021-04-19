@@ -150,3 +150,12 @@ def plot_split_perf_custom(folder_pred=None, folder_dmcpred=None, folder_dmc=Non
     ax.spines['top'].set_visible(False)
     ax.set_ylim([-0.2, 1.6])
     return ax
+
+def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_stim='onehot',
+                                       sparsity_str='5e-03'):
+   base_folder = f'models/{ratio_exp_str}/{task}_task/{nature_stim}/sparsity_{sparsity_str}/'
+   plot_split_perf_custom(folder_pred=base_folder + 'pred_only/',
+                          folder_dmc=base_folder + f'{task}_only/',
+                          folder_dmcpred=base_folder + f'pred_{task}/',
+                          task_type=task)
+   plt.title(task + r'$\; P(\alpha = \beta) = $' + f'0.{ratio_exp_str[:2]},' + r'$ \; \; \lambda=$' + f'{sparsity_str}');
