@@ -594,7 +594,7 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
         for nature_stim in nature_stim_list:
             for type_task in type_task_list:
                 for train_task in train_task_list:
-                    parent_folder = f'models/{exp_str}/{type_task}_task/{nature_stim}/{sci_not_spars}/'
+                    parent_folder = f'models/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
                     if not os.path.exists(parent_folder):
                         os.makedirs(parent_folder)
                         for child_folder in ['pred_only', f'{type_task}_only', f'pred_{type_task}']:
