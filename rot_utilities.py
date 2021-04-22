@@ -259,3 +259,46 @@ def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=
         learn_eff[key] = np.mean(mat, 1)  # sum = integral, mean = divide by n epochs
         assert len(learn_eff[key]) == len(list_rnns)
     return learn_eff
+
+def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='7525',
+                                        nature_stim_list=['onehot', 'periodic'],
+                                        sparsity_str_list=['0e+00', '1e-05', '1e-04', '1e-03', '5e-03']):
+
+    n_data = len(task_list) * len(nature_stim_list) * len(sparsity_str_list) * 4 * 10
+
+    learn_eff_dict = {**{x: np.zeros(n_data, dtype='object') for x in ['task', 'nature_stim', 'loss_comp', 'setting']},
+                      **{x: np.zeros(n_data) for x in ['learning_eff' ,'sparsity']}}
+
+    i_conf = 0
+    for i_task, task in enumerate(task_list):
+        for i_nat, nature_stim in enumerate(nature_stim_list):
+            for i_spars, sparsity_str in enumerate(sparsity_str_list):
+                spars = float(sparsity_str)
+                base_folder = f'models/{ratio_exp_str}/{task}_task/{nature_stim}/sparsity_{sparsity_str}/'
+                folders_dict = {}
+                folders_dict['pred_only'] = base_folder + 'pred_only/'
+                folders_dict[f'{task}_only'] = base_folder + f'{task}_only/'
+                folders_dict[f'pred_{task}'] = base_folder + f'pred_{task}/'
+                for key, folder_rnns in folders_dict.items():
+                    list_keys = key.split('_')
+                    if 'only' in list_keys:
+                        list_keys.remove('only')
+                        suffix = '_single'
+                    else:
+                        suffix = '_multi'
+                    learn_eff = compute_learning_index(rnn_folder=folder_rnns,
+                                                          list_loss=list_keys)
+                    for loss_comp in list_keys:
+                        for le in learn_eff[loss_comp]:
+                            learn_eff_dict['task'][i_conf] = task
+                            learn_eff_dict['nature_stim'][i_conf] = nature_stim
+                            learn_eff_dict['sparsity'][i_conf] = spars
+                            # learn_eff_dict['mean_learning_eff'][i_conf] = np.mean(learn_eff[loss_comp])
+                            # learn_eff_dict['std_learning_eff'][i_conf] = np.std(learn_eff[loss_comp])
+                            learn_eff_dict['learning_eff'][i_conf] = le
+                            learn_eff_dict['setting'][i_conf] = suffix[1:]
+                            learn_eff_dict['loss_comp'][i_conf] = loss_comp + suffix
+                            i_conf += 1
+
+    learn_eff_df = pd.DataFrame(learn_eff_dict)
+    return learn_eff_df

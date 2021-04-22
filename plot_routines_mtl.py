@@ -26,6 +26,12 @@ for ii, x in enumerate(plt.rcParams['axes.prop_cycle']()):
         break  # after 8 it repeats (for ever)
 plt.rcParams['axes.prop_cycle'] = cycler(color=sns.color_palette('colorblind'))
 
+time_labels = ['0', '0', r'$S_1$', r'$S_1$', '0', '0', r'$S_2$', r'$S_2$', '0', '0', 'G', 'G', '0', '0']
+time_labels_blank = ['' if x == '0' else x for x in time_labels]
+input_vector_labels = ['0', r'$A_1$', r'$A_2$', r'$B_1$', r'$B_2$', 'G']
+output_vector_labels = input_vector_labels + [r'$M_1$', r'$M_2$']
+
+
 def set_fontsize(font_size=12):
     plt.rcParams['font.size'] = font_size
     plt.rcParams['axes.autolimit_mode'] = 'data' # default: 'data'
@@ -151,8 +157,26 @@ def plot_split_perf_custom(folder_pred=None, folder_dmcpred=None, folder_dmc=Non
     ax.set_ylim([-0.2, 1.6])
     return ax
 
+def plot_example_trial(trial, ax=None, yticklabels=output_vector_labels,
+                       xticklabels=time_labels_blank[1:], c_bar=True,
+                       vmin=0, vmax=1, c_map='magma', print_labels=True):
+    '''Plot 1 example trial'''
+    if ax is None:
+        ax = plt.subplot(111)
+
+    sns.heatmap(trial.T, yticklabels=yticklabels, cmap=c_map, cbar=c_bar,
+            xticklabels=xticklabels, ax=ax, vmin=vmin, vmax=vmax, )
+    bottom, top = ax.get_ylim()
+    ax.set_ylim(bottom + 0.5, top - 0.5)
+    ax.set_yticklabels(labels=yticklabels, rotation=0)
+    ax.set_xticklabels(labels=xticklabels, rotation=0)
+    if print_labels:
+        ax.set_xlabel('Time')
+        ax.set_ylabel('Stimulus vector')
+    return ax
+
 def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_stim='onehot',
-                                       sparsity_str='5e-03', ax=None, plot_legend=True):
+                                       sparsity_str='5e-03', ax=None, plot_legend=True, verbose=0):
    base_folder = f'models/{ratio_exp_str}/{task}_task/{nature_stim}/sparsity_{sparsity_str}/'
    folders_dict = {}
    folders_dict['pred_only'] = base_folder + 'pred_only/'
@@ -171,4 +195,20 @@ def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_
            list_keys.remove('only')
        learn_eff = ru.compute_learning_index(rnn_folder=folder_rnns,
                                              list_loss=list_keys)
-       print(key, {x: (np.round(np.mean(learn_eff[x]), 4), np.round(np.std(learn_eff[x]), 4)) for x in list_keys})
+       if verbose > 0:
+           print(key, {x: (np.round(np.mean(learn_eff[x]), 4), np.round(np.std(learn_eff[x]), 4)) for x in list_keys})
+
+def plot_learning_efficiency():
+    df = ru.calculate_all_learning_eff_indices()
+    fig, ax = plt.subplots(1, 2, figsize=(12, 3), gridspec_kw={'wspace': 0.7})
+    # print(df.columns)
+    spec_task_df = df[[x[:3] == 'dmc' or x[:3] == 'dms' for x in df['loss_comp']]]
+    for i_nat, nat in enumerate(['onehot', 'periodic']):
+        sns.lineplot(data=spec_task_df[spec_task_df['nature_stim'] == nat], x='sparsity', y='learning_eff',
+                     hue='setting', style='task', markers=True, ci=95, ax=ax[i_nat], hue_order=['multi', 'single'])
+        ax[i_nat].set_xscale('log')
+        ax[i_nat].legend(bbox_to_anchor=(1.4, 1), loc='upper right')
+        ax[i_nat].set_ylim([0, 1])
+        ax[i_nat].set_title(nat, fontdict={'weight': 'bold'})
+        ax[i_nat].set_xlabel('Sparsity regularisation')
+        ax[i_nat].set_ylabel('Learning efficiency index')

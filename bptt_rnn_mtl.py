@@ -91,14 +91,16 @@ def generate_synt_data_general(n_total=100, t_delay=2, t_stim=2,
 
     assert y_test.shape[0] == len(labels_test)
     slice_go_output = slice((3 * pd['t_delay'] + 2 * pd['t_stim'] - 1), (3 * pd['t_delay'] + 3 * pd['t_stim'] - 1))  # -1 b/c output is one time step ahaead from input
-    if task == 'dms' or task == 'dmc':  # determine matches & non matches
-        match_train = np.where(np.array([x[0] == x[1] for x in labels_train]))[0]
-        nonmatch_train = np.where(np.array([x[0] != x[1] for x in labels_train]))[0]
+    if task == 'dms' or task == 'dmc' or task == 'dmrs' or task == 'dmrc':  # determine matches & non matches
+        # match_train = np.where(np.array([x[0] == x[1] for x in labels_train]))[0]
+        # nonmatch_train = np.where(np.array([x[0] != x[1] for x in labels_train]))[0]
+        match_train = np.where(np.array([x[1] != 'x' for x in labels_train]))[0]
+        nonmatch_train = np.where(np.array([x[1] == 'x' for x in labels_train]))[0]
         y_train[match_train, slice_go_output, 6] = 1
         y_train[nonmatch_train, slice_go_output, 7] = 1
 
-        match_test = np.where(np.array([x[0] == x[1] for x in labels_test]))[0]
-        nonmatch_test = np.where(np.array([x[0] != x[1] for x in labels_test]))[0]
+        match_test = np.where(np.array([x[1] != 'x' for x in labels_test]))[0]
+        nonmatch_test = np.where(np.array([x[1] == 'x'  for x in labels_test]))[0]
         y_test[match_test, slice_go_output, 6] = 1
         y_test[nonmatch_test, slice_go_output, 7] = 1
 
@@ -145,7 +147,7 @@ def fill_onehot_trials(all_seq=None, labels=None, task='dmc', pd=None):
 def fill_periodic_trials(all_seq=None, labels=None, task='dmc', pd=None, n_cat=4):
 
     assert pd['n_total'] % n_cat == 0, 'number of categories not a factor of number of trials'
-    assert task == 'dmc' or task == 'dms'
+    assert task == 'dmc' or task == 'dms' or task == 'dmrs' or task == 'dmrc'
     assert n_cat < 10  # to stay within 1 digit with labelling
 
     ## Create periodic stim by cos & sin of angle
@@ -153,9 +155,9 @@ def fill_periodic_trials(all_seq=None, labels=None, task='dmc', pd=None, n_cat=4
     cos_stim = np.cos(rad_stim)
     sin_stim = np.sin(rad_stim)
 
-    if task == 'dmc':
+    if task == 'dmc' or task == 'dmrc':
         add_task = 2
-    elif task == 'dms':
+    elif task == 'dms' or task == 'dmrs':
         add_task = 0
     n_trials_per_cat = int(np.round(pd['n_total'] / n_cat))
     n_trials_exp_per_cat = int(np.round(pd['ratio_exp'] * n_trials_per_cat))
@@ -171,11 +173,15 @@ def fill_periodic_trials(all_seq=None, labels=None, task='dmc', pd=None, n_cat=4
         all_seq[i_trial:i_next_cat_trial, :, 2][:, pd['slice_s1']] = sin_stim[i_cat]
 
         ## Fill S2
-        all_seq[i_trial:(i_trial + n_trials_exp_per_cat), :, (1 + add_task)][:, pd['slice_s2']] = cos_stim[i_cat]  # same stim
-        all_seq[i_trial:(i_trial + n_trials_exp_per_cat), :, (2 + add_task)][:, pd['slice_s2']] = sin_stim[i_cat]
-        labels[i_trial:(i_trial + n_trials_exp_per_cat)] = f'{i_cat}{i_cat}'
+        if task == 'dms' or task == 'dmc':
+            match_cat = i_cat
+        elif task == 'dmrs' or task == 'dmrc':
+            match_cat = (i_cat + 1) % n_cat
+        all_seq[i_trial:(i_trial + n_trials_exp_per_cat), :, (1 + add_task)][:, pd['slice_s2']] = cos_stim[match_cat]  # same stim
+        all_seq[i_trial:(i_trial + n_trials_exp_per_cat), :, (2 + add_task)][:, pd['slice_s2']] = sin_stim[match_cat]
+        labels[i_trial:(i_trial + n_trials_exp_per_cat)] = f'{i_cat}{match_cat}'
 
-        random_cat = np.random.choice(a=np.delete(np.arange(n_cat), i_cat, 0), size=n_trials_unexp_per_cat, replace=True)
+        random_cat = np.random.choice(a=np.delete(np.arange(n_cat), match_cat, 0), size=n_trials_unexp_per_cat, replace=True)
         all_seq[(i_trial + n_trials_exp_per_cat):i_next_cat_trial, :, (1 + add_task)][:, pd['slice_s2']] = np.array([cos_stim[x] for x in random_cat])[:, None]  # different stim
         all_seq[(i_trial + n_trials_exp_per_cat):i_next_cat_trial, :, (2 + add_task)][:, pd['slice_s2']] = np.array([sin_stim[x] for x in random_cat])[:, None]
         # labels[(i_trial + n_trials_exp_per_cat):i_next_cat_trial] = [f'{i_cat}{i_random_cat.copy()}' for i_random_cat in random_cat]  # specify other cat
@@ -508,7 +514,7 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=False,
                         n_threads=4, save_folder='models/',
                         late_s2=False, nature_stim='onehot', type_task='dmc', train_task='pred_only'):
     assert late_s2 is False, 'not implemented'
-    assert type_task in ['dms', 'dmc']
+    assert type_task in ['dms', 'dmc', 'dmrs', 'dmrc']
     assert train_task in ['pred_only', 'spec_only', 'pred_spec']
     if train_task == 'pred_only':
         task_name = 'pred_only'
