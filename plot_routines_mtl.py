@@ -107,7 +107,7 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
     if plot_top:
         ax_top.set_ylabel('Cross entropy ' + r'$H$')
         ax_top.set_xlabel('Epoch'); #ax.set_ylabel('error relative')
-        ax_top.legend(frameon=False, bbox_to_anchor=(0.5, 0.2)); #ax.set_xlim([0, 10])
+        # ax_top.legend(frameon=False, bbox_to_anchor=(0.5, 0.2)); #ax.set_xlim([0, 10])
     if plot_bottom:
         ax_bottom.legend(frameon=False)
         ax_bottom.set_ylabel('L1 regularisation')
@@ -152,10 +152,23 @@ def plot_split_perf_custom(folder_pred=None, folder_dmcpred=None, folder_dmc=Non
     return ax
 
 def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_stim='onehot',
-                                       sparsity_str='5e-03'):
+                                       sparsity_str='5e-03', ax=None, plot_legend=True):
    base_folder = f'models/{ratio_exp_str}/{task}_task/{nature_stim}/sparsity_{sparsity_str}/'
-   plot_split_perf_custom(folder_pred=base_folder + 'pred_only/',
-                          folder_dmc=base_folder + f'{task}_only/',
-                          folder_dmcpred=base_folder + f'pred_{task}/',
-                          task_type=task)
+   folders_dict = {}
+   folders_dict['pred_only'] = base_folder + 'pred_only/'
+   folders_dict[f'{task}_only'] = base_folder + f'{task}_only/'
+   folders_dict[f'pred_{task}'] = base_folder + f'pred_{task}/'
+   # print(folders_dict)
+   plot_split_perf_custom(folder_pred=folders_dict['pred_only'],
+                          folder_dmc=folders_dict[f'{task}_only'],
+                          folder_dmcpred=folders_dict[f'pred_{task}'],
+                          task_type=task, ax=ax, plot_legend=plot_legend)
    plt.title(task + r'$\; P(\alpha = \beta) = $' + f'0.{ratio_exp_str[:2]},' + r'$ \; \; \lambda=$' + f'{sparsity_str}');
+
+   for key, folder_rnns in folders_dict.items():
+       list_keys = key.split('_')
+       if 'only' in list_keys:
+           list_keys.remove('only')
+       learn_eff = ru.compute_learning_index(rnn_folder=folder_rnns,
+                                             list_loss=list_keys)
+       print(key, {x: (np.round(np.mean(learn_eff[x]), 4), np.round(np.std(learn_eff[x]), 4)) for x in list_keys})

@@ -223,9 +223,9 @@ def rotation_index(mat, times_early=[4], times_late=[6]):
     elements_cross = np.zeros(int(n_te * n_tl))
     elements_early = np.zeros(n_te + n_tl)
 
-    i_cross = 0 
+    i_cross = 0
     for i_tau, tau in enumerate(times_early):
-        elements_early[i_tau] = mat[tau, tau]  # auto temp during early 
+        elements_early[i_tau] = mat[tau, tau]  # auto temp during early
         for i_t, t in enumerate(times_late):
             elements_cross[i_cross] = mat[tau, t]  # get square
             i_cross += 1
@@ -235,4 +235,27 @@ def rotation_index(mat, times_early=[4], times_late=[6]):
         elements_early[i_tau + i_t] = mat[t, t]
     rot = np.mean(elements_cross) / np.mean(elements_early)
     return rot
-    
+
+def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=True):
+    list_rnns = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
+    n_rnn = len(list_rnns)
+    for i_rnn, rnn_name in enumerate(list_rnns):
+        rnn = load_rnn(os.path.join(rnn_folder, rnn_name))
+        if i_rnn == 0:
+            n_epochs = rnn.info_dict['n_epochs']
+            conv_dict = {key: np.zeros((n_rnn, n_epochs)) for key in list_loss}
+        else:
+            assert rnn.info_dict['n_epochs'] == n_epochs, 'number of epochs not equal, this is not implemented explicitly when computing the integral'
+        for key in list_loss:
+            assert key in rnn.test_loss_split.keys(), f'{key} not saved for {rnn}'
+            arr = rnn.test_loss_split[key]
+            conv_dict[key][i_rnn, :] = arr.copy()
+    learn_eff = {}
+    for key in list_loss:
+        mat = conv_dict[key]
+        if normalise_start:
+            mat = mat / np.mean(mat[:, 0])#[:, np.newaxis]
+        # plot_arr = np.mean(mat, 0)
+        learn_eff[key] = np.mean(mat, 1)  # sum = integral, mean = divide by n epochs
+        assert len(learn_eff[key]) == len(list_rnns)
+    return learn_eff
