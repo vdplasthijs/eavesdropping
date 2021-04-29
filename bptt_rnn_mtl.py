@@ -6,7 +6,16 @@
 # @Last modified time: 2021-04-13
 
 
+import os, sys 
 
+num_threads = 4 # Set number of CPUs to use!
+
+os.environ["MKL_NUM_THREADS"] = "%s"%num_threads
+os.environ["NUMEXPR_NUM_THREADS"] = "%s"%num_threads
+os.environ["OMP_NUM_THREADS"] = "%s"%num_threads
+os.environ["OPENBLAS_NUM_THREADS"] = "%s"%num_threads
+os.environ["VECLIB_MAXIMUM_THREADS"] = "%s"%num_threads
+os.environ["NUMBA_NUM_THREADS"] = "%s"%num_threads
 
 import numpy as np
 import torch
@@ -18,6 +27,10 @@ from tqdm import tqdm, trange
 import sklearn.svm, sklearn.model_selection, sklearn.discriminant_analysis
 # import rot_utilities as ru
 from multiprocessing.dummy import Pool as ThreadPool
+
+device = 'cpu'
+# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(device)
 
 def generate_synt_data_general(n_total=100, t_delay=2, t_stim=2,
                                ratio_train=0.8, ratio_exp=0.75,
@@ -285,6 +298,7 @@ class RNN_MTL(nn.Module):
         (rnn_state) is None, self.state will be used (regular behaviour).'''
         if rnn_state is None:
             rnn_state = self.state
+        # rnn_state.to(device)  # if use_gpu
         lin_comb = self.lin_input(inp) + self.lin_feedback(rnn_state)  # input + previous state
         new_state = torch.tanh(lin_comb)  # transfer function
         self.state = new_state
@@ -437,12 +451,13 @@ def compute_full_pred(input_data, model):
     return full_pred
 
 def bptt_training(rnn, optimiser, dict_training_params,
-                  x_train, x_test, y_train, y_test, verbose=1, late_s2=False):
+                  x_train, x_test, y_train, y_test, verbose=1, late_s2=False,
+                  use_gpu=False):
     '''Training algorithm for backpropagation through time, given a RNN model, optimiser,
     dictionary with training parameters and train and test data. RNN is NOT reset,
     so continuation training is possible. Training can be aborted prematurely by Ctrl+C,
     and it will terminate correctly.'''
-    assert dict_training_params['bs'] == 1, 'batch size is not 1; this error is thrown because for MNM we assume it is 1 to let labels correspond to dataloadre loop'
+    # assert dict_training_params['bs'] == 1, 'batch size is not 1; this error is thrown because for MNM we assume it is 1 to let labels correspond to dataloadre loop'
     assert late_s2 is False, 'not implemented'
     ## Create data loader objects:
     train_ds = TensorDataset(x_train, y_train)
@@ -468,6 +483,9 @@ def bptt_training(rnn, optimiser, dict_training_params,
                 rnn.train()  # set to train model (i.e. allow gradient computation/tracking)
                 it_train = 0
                 for xb, yb in train_dl:  # returns torch(n_bs x n_times x n_freq)
+                    if use_gpu:
+                        xb, yb = xb.to(device), yb.to(device)
+                        rnn.to(device)
                     # curr_label = labels_train[it_train]  # this works if batch size == 1
                     full_pred = compute_full_pred(model=rnn, input_data=xb)  # predict time trace
                     loss, _ = total_loss(y_est=full_pred, y_true=yb, model=rnn)
@@ -481,10 +499,12 @@ def bptt_training(rnn, optimiser, dict_training_params,
                     ## Compute losses for saving:
                     full_train_pred = compute_full_pred(model=rnn, input_data=x_train)
                     train_loss, _ = total_loss(y_est=full_train_pred, y_true=y_train, model=rnn)
+                    if use_gpu:
+                        train_loss = train_loss.cpu()
                     rnn.train_loss_arr.append(float(train_loss.detach().numpy()))
 
                     full_test_pred = compute_full_pred(model=rnn, input_data=x_test)
-                    test_loss_append_split(y_est=full_test_pred, y_true=y_test, model=rnn)  # append loss within function
+                    # test_loss_append_split(y_est=full_test_pred, y_true=y_test, model=rnn)  # append loss within function
 
                     ## Inspect training loss for convergence
                     new_loss = rnn.train_loss_arr[epoch]
@@ -511,7 +531,7 @@ def bptt_training(rnn, optimiser, dict_training_params,
 
 
 def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=False,
-                        n_threads=4, save_folder='models/',
+                        n_threads=4, save_folder='models/', use_gpu=False,
                         late_s2=False, nature_stim='onehot', type_task='dmc', train_task='pred_only'):
     assert late_s2 is False, 'not implemented'
     assert type_task in ['dms', 'dmc', 'dmrs', 'dmrc']
@@ -523,7 +543,7 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=False,
     elif train_task == 'pred_spec':
         task_name = f'pred_{type_task}'
 
-    def execute_rnn_training(nn):
+    def execute_rnn_training(nn, use_gpu=False):
         print(f'\n-----------\nsimulation {nn}/{n_simulations}')
         ## Generate data:
         tmp0, tmp1 = generate_synt_data_general(n_total=d_dict['n_total'], t_delay=d_dict['t_delay'], t_stim=d_dict['t_stim'],
@@ -533,9 +553,14 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=False,
 
         x_train, y_train, x_test, y_test = tmp0
         labels_train, labels_test = tmp1
+        if use_gpu:
+            x_train, y_train = x_train.to(device), y_train.to(device)
+            x_test, y_test = x_test.to(device), y_test.to(device)
 
         ## Initiate RNN model
         rnn = RNN_MTL(task=task_name, nature_stim=nature_stim, n_nodes=t_dict['n_nodes'])  # Create RNN class
+        if use_gpu:
+            rnn.to(device)
         opt = torch.optim.SGD(rnn.parameters(), lr=t_dict['learning_rate'])  # call optimiser from pytorhc
         rnn.set_info(param_dict={**d_dict, **t_dict})
         rnn.info_dict['type_task'] = type_task
@@ -545,7 +570,7 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=False,
         ## Train with BPTT
         rnn = bptt_training(rnn=rnn, optimiser=opt, dict_training_params=t_dict,
                             x_train=x_train, x_test=x_test, y_train=y_train, y_test=y_test,
-                            verbose=0, late_s2=late_s2)
+                            verbose=0, late_s2=late_s2, use_gpu=use_gpu)
 
         # ## Decode cross temporally
         # score_mat, decoder_dict, _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
@@ -563,7 +588,7 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=False,
             results = pool.map(execute_rnn_training, range(n_simulations))
         else:
             for nn in range(n_simulations):
-                execute_rnn_training(nn=nn)
+                execute_rnn_training(nn=nn, use_gpu=use_gpu)
     except KeyboardInterrupt:
         print('KeyboardInterrupt, exit')
 
@@ -571,7 +596,11 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=False,
 
 def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                  train_task_list=['pred_only', 'spec_only', 'pred_spec'],
-                 sparsity_list=[5e-3], n_sim=10):
+                 sparsity_list=[5e-3], n_sim=10, use_gpu=False):
+
+    if use_gpu:
+        torch.set_default_tensor_type(torch.cuda.FloatTensor)
+
     # Data parameters dictionary
     d_dict = {'n_total': 1000,  # total number of data sequences
              'ratio_train': 0.8,
@@ -609,13 +638,13 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
 
                     if train_task == 'pred_only':
                         init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
-                                            save_folder=parent_folder + f'pred_only/',
+                                            save_folder=parent_folder + f'pred_only/', use_gpu=use_gpu,
                                             late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='pred_only')
                     elif train_task == 'spec_only':
                         init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
-                                            save_folder=parent_folder + f'{type_task}_only/',
+                                            save_folder=parent_folder + f'{type_task}_only/', use_gpu=use_gpu,
                                             late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='spec_only')
                     elif train_task == 'pred_spec':
                         init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
-                                            save_folder=parent_folder + f'pred_{type_task}/',
+                                            save_folder=parent_folder + f'pred_{type_task}/', use_gpu=use_gpu,
                                             late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='pred_spec')
