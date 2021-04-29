@@ -263,8 +263,11 @@ def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=
 def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='7525',
                                         nature_stim_list=['onehot', 'periodic'],
                                         sparsity_str_list=['0e+00', '1e-05', '1e-04', '1e-03', '5e-03']):
-
-    n_data = len(task_list) * len(nature_stim_list) * len(sparsity_str_list) * 4 * 10
+    # nature_stim_list=['periodic']
+    sparsity_str_list = ['0e+00', '5e-06', '1e-05', '5e-05', '1e-04', '5e-04', '1e-03', '5e-03']
+    n_sim = 10
+    n_loss_functions_per_sim = 4
+    n_data = len(task_list) * len(nature_stim_list) * len(sparsity_str_list) * n_loss_functions_per_sim * n_sim
 
     learn_eff_dict = {**{x: np.zeros(n_data, dtype='object') for x in ['task', 'nature_stim', 'loss_comp', 'setting']},
                       **{x: np.zeros(n_data) for x in ['learning_eff' ,'sparsity']}}
@@ -275,6 +278,9 @@ def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='
             for i_spars, sparsity_str in enumerate(sparsity_str_list):
                 spars = float(sparsity_str)
                 base_folder = f'models/{ratio_exp_str}/{task}_task/{nature_stim}/sparsity_{sparsity_str}/'
+                if not os.path.exists(base_folder):
+                    # print(base_folder, 'does not exist', nature_stim)
+                    continue
                 folders_dict = {}
                 folders_dict['pred_only'] = base_folder + 'pred_only/'
                 folders_dict[f'{task}_only'] = base_folder + f'{task}_only/'
@@ -299,6 +305,12 @@ def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='
                             learn_eff_dict['setting'][i_conf] = suffix[1:]
                             learn_eff_dict['loss_comp'][i_conf] = loss_comp + suffix
                             i_conf += 1
-
     learn_eff_df = pd.DataFrame(learn_eff_dict)
+    if i_conf > n_data:
+        assert False, 'dictionary was not large enough'
+    elif i_conf < n_data:
+        learn_eff_df = learn_eff_df[:i_conf]
+        print(f'Cutting of DF because of empty rows')
+
+
     return learn_eff_df

@@ -74,8 +74,10 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
             assert rnn.info_dict['n_epochs'] == n_tp
         for key, arr in rnn.test_loss_split.items():
             # if key != 'pred':
-            conv_dict[key][i_rnn, :] = arr.copy()
-
+            try:
+                conv_dict[key][i_rnn, :] = arr.copy()
+            except ValueError:
+                print(rnn, key, arr)
         if plot_total:
             conv_dict['pred_sep'][i_rnn, :] = np.sum([conv_dict[key][i_rnn, :] for key in ['0', 'S2', 'G']], 0)
 
@@ -198,17 +200,39 @@ def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_
        if verbose > 0:
            print(key, {x: (np.round(np.mean(learn_eff[x]), 4), np.round(np.std(learn_eff[x]), 4)) for x in list_keys})
 
-def plot_learning_efficiency():
+def plot_learning_efficiency(task_list_tuple=(['dms', 'dmc'],), plot_difference=False):
     df = ru.calculate_all_learning_eff_indices()
+    # return df
     fig, ax = plt.subplots(1, 2, figsize=(12, 3), gridspec_kw={'wspace': 0.7})
-    # print(df.columns)
-    spec_task_df = df[[x[:3] == 'dmc' or x[:3] == 'dms' for x in df['loss_comp']]]
-    for i_nat, nat in enumerate(['onehot', 'periodic']):
-        sns.lineplot(data=spec_task_df[spec_task_df['nature_stim'] == nat], x='sparsity', y='learning_eff',
-                     hue='setting', style='task', markers=True, ci=95, ax=ax[i_nat], hue_order=['multi', 'single'])
-        ax[i_nat].set_xscale('log')
-        ax[i_nat].legend(bbox_to_anchor=(1.4, 1), loc='upper right')
-        ax[i_nat].set_ylim([0, 1])
-        ax[i_nat].set_title(nat, fontdict={'weight': 'bold'})
-        ax[i_nat].set_xlabel('Sparsity regularisation')
-        ax[i_nat].set_ylabel('Learning efficiency index')
+    nature_stim_list = ['periodic', 'onehot']
+    i_plot = 0
+    if plot_difference:
+        tmp_df = df[[x[:4] != 'pred' for x in df['loss_comp']]].groupby(['task', 'nature_stim', 'setting','sparsity']).mean()  # compute mean for each set of conditions [ across simulations]
+        multi_rows = [True if x[2] == 'multi' else False for x in tmp_df.index]  # select multitask settings
+        tmp_df['learning_eff'][multi_rows] *= -1   # multiple effiency with -1 so the difference can be computed using condition-specific sum
+        tmp_df = tmp_df.groupby(['task', 'nature_stim', 'sparsity']).sum()  # effectively comppute difference
+        tmp_df.reset_index(inplace=True)  # bring multi indexes back to column values
+        for i_nat, nat in enumerate(nature_stim_list):
+            sns.lineplot(data=tmp_df[tmp_df['nature_stim'] == nat], x='sparsity', y='learning_eff',
+                         style='task', ax=ax[i_plot], color='k', linewidth=3, markers=True)
+            ax[i_plot].plot([0, 0.01], [0, 0], c='grey')
+            ax[i_plot].set_ylim([-0.5, 0.8])
+            ax[i_plot].set_ylabel('Difference in \nlearning efficiency index')
+            i_plot += 1
+    else:
+        for task_list in task_list_tuple:
+            spec_task_df = df[[x[:3] in task_list for x in df['loss_comp']]]
+            for i_nat, nat in enumerate(nature_stim_list):
+                sns.lineplot(data=spec_task_df[spec_task_df['nature_stim'] == nat], x='sparsity', y='learning_eff',
+                             hue='setting', style='task', markers=True, ci=95, ax=ax[i_plot], hue_order=['multi', 'single'])
+                ax[i_plot].set_ylim([0, 1.1])
+                ax[i_plot].set_ylabel('Learning efficiency index\n(= integral loss function)')
+                i_plot += 1
+    for i_plot in range(len(ax)):
+        # ax[i_plot].set_xscale('log', nonposx='clip')
+        ax[i_plot].set_xscale('symlog', linthreshx=2e-6)
+        ax[i_plot].legend(bbox_to_anchor=(1.4, 1), loc='upper right')
+        ax[i_plot].set_title(nature_stim_list[i_plot], fontdict={'weight': 'bold'})
+        ax[i_plot].set_xlabel('Sparsity regularisation')
+
+    return df

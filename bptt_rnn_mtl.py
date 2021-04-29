@@ -6,7 +6,7 @@
 # @Last modified time: 2021-04-13
 
 
-import os, sys 
+import os, sys
 
 num_threads = 4 # Set number of CPUs to use!
 
@@ -504,7 +504,7 @@ def bptt_training(rnn, optimiser, dict_training_params,
                     rnn.train_loss_arr.append(float(train_loss.detach().numpy()))
 
                     full_test_pred = compute_full_pred(model=rnn, input_data=x_test)
-                    # test_loss_append_split(y_est=full_test_pred, y_true=y_test, model=rnn)  # append loss within function
+                    test_loss_append_split(y_est=full_test_pred, y_true=y_test, model=rnn)  # append loss within function
 
                     ## Inspect training loss for convergence
                     new_loss = rnn.train_loss_arr[epoch]
