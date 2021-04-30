@@ -6,7 +6,7 @@
 # @Last modified time: 2021-04-13
 
 
-import os, sys
+import os, sys, string
 
 # num_threads = 4 # Set number of CPUs to use!
 # os.environ["MKL_NUM_THREADS"] = "%s"%num_threads
@@ -347,6 +347,14 @@ class RNN_MTL(nn.Module):
         elif folder[-1] != '/':
             folder += '/'
         self.full_path = folder + self.file_name
+        i_ascii = 0
+        suffix_list = string.ascii_letters
+        while os.path.exists(self.full_path):
+            self.full_path = folder + self.file_name[:-5] + suffix_list[i_ascii] + '.data'
+            i_ascii += 1
+            if i_ascii == len(suffix_list):
+                print('WARNING: EXPANDING ASCII LIST')
+                suffix_list = [x + x for x in suffix_list]
         file_handle = open(self.full_path, 'wb')
         pickle.dump(self, file_handle)
         if verbose > 0:
