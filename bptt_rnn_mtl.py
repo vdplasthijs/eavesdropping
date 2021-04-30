@@ -8,14 +8,13 @@
 
 import os, sys
 
-num_threads = 4 # Set number of CPUs to use!
-
-os.environ["MKL_NUM_THREADS"] = "%s"%num_threads
-os.environ["NUMEXPR_NUM_THREADS"] = "%s"%num_threads
-os.environ["OMP_NUM_THREADS"] = "%s"%num_threads
-os.environ["OPENBLAS_NUM_THREADS"] = "%s"%num_threads
-os.environ["VECLIB_MAXIMUM_THREADS"] = "%s"%num_threads
-os.environ["NUMBA_NUM_THREADS"] = "%s"%num_threads
+# num_threads = 4 # Set number of CPUs to use!
+# os.environ["MKL_NUM_THREADS"] = "%s"%num_threads
+# os.environ["NUMEXPR_NUM_THREADS"] = "%s"%num_threads
+# os.environ["OMP_NUM_THREADS"] = "%s"%num_threads
+# os.environ["OPENBLAS_NUM_THREADS"] = "%s"%num_threads
+# os.environ["VECLIB_MAXIMUM_THREADS"] = "%s"%num_threads
+# os.environ["NUMBA_NUM_THREADS"] = "%s"%num_threads
 
 import numpy as np
 import torch
@@ -26,7 +25,10 @@ import pickle, datetime, time, os, sys, git
 from tqdm import tqdm, trange
 import sklearn.svm, sklearn.model_selection, sklearn.discriminant_analysis
 # import rot_utilities as ru
-from multiprocessing.dummy import Pool as ThreadPool
+# from multiprocessing.dummy import Pool as ThreadPool
+from multiprocessing import Pool
+import itertools 
+from itertools import repeat as irep
 
 device = 'cpu'
 # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -528,10 +530,49 @@ def bptt_training(rnn, optimiser, dict_training_params,
             print(f'Training ended prematurely by user at epoch {epoch}.\nResults saved in RNN Class.')
         return rnn
 
+def execute_rnn_training(nn, n_simulations, t_dict, d_dict, nature_stim='',
+                        type_task='', task_name='', device='', late_s2=False, 
+                        train_task='', save_folder='', use_gpu=False):
+    print(f'\n-----------\nsimulation {nn}/{n_simulations}')
+    ## Generate data:
+    tmp0, tmp1 = generate_synt_data_general(n_total=d_dict['n_total'], t_delay=d_dict['t_delay'], t_stim=d_dict['t_stim'],
+                                ratio_train=d_dict['ratio_train'], ratio_exp=d_dict['ratio_exp'],
+                                noise_scale=d_dict['noise_scale'], late_s2=False,
+                                nature_stim=nature_stim, task=type_task)
+
+    x_train, y_train, x_test, y_test = tmp0
+    labels_train, labels_test = tmp1
+    if use_gpu:
+        x_train, y_train = x_train.to(device), y_train.to(device)
+        x_test, y_test = x_test.to(device), y_test.to(device)
+
+    ## Initiate RNN model
+    rnn = RNN_MTL(task=task_name, nature_stim=nature_stim, n_nodes=t_dict['n_nodes'])  # Create RNN class
+    if use_gpu:
+        rnn.to(device)
+    opt = torch.optim.SGD(rnn.parameters(), lr=t_dict['learning_rate'])  # call optimiser from pytorhc
+    rnn.set_info(param_dict={**d_dict, **t_dict})
+    rnn.info_dict['type_task'] = type_task
+    rnn.info_dict['train_task'] = train_task
+    rnn.info_dict['late_s2'] = late_s2
+
+    ## Train with BPTT
+    rnn = bptt_training(rnn=rnn, optimiser=opt, dict_training_params=t_dict,
+                        x_train=x_train, x_test=x_test, y_train=y_train, y_test=y_test,
+                        verbose=0, late_s2=late_s2, use_gpu=use_gpu)
+
+    # ## Decode cross temporally
+    # score_mat, decoder_dict, _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
+    #                                                 n_samples=None, ratio_train=0.8, verbose=False,
+    #                                                 late_s2=late_s2)
+
+    ## Save results:
+    rnn.save_model(folder=save_folder)
 
 
-def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=False,
-                        n_threads=4, save_folder='models/', use_gpu=False,
+
+def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
+                        n_threads=8, save_folder='models/', use_gpu=False,
                         late_s2=False, nature_stim='onehot', type_task='dmc', train_task='pred_only'):
     assert late_s2 is False, 'not implemented'
     assert type_task in ['dms', 'dmc', 'dmrs', 'dmrc']
@@ -543,52 +584,20 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=False,
     elif train_task == 'pred_spec':
         task_name = f'pred_{type_task}'
 
-    def execute_rnn_training(nn, use_gpu=False):
-        print(f'\n-----------\nsimulation {nn}/{n_simulations}')
-        ## Generate data:
-        tmp0, tmp1 = generate_synt_data_general(n_total=d_dict['n_total'], t_delay=d_dict['t_delay'], t_stim=d_dict['t_stim'],
-                                    ratio_train=d_dict['ratio_train'], ratio_exp=d_dict['ratio_exp'],
-                                    noise_scale=d_dict['noise_scale'], late_s2=False,
-                                    nature_stim=nature_stim, task=type_task)
-
-        x_train, y_train, x_test, y_test = tmp0
-        labels_train, labels_test = tmp1
-        if use_gpu:
-            x_train, y_train = x_train.to(device), y_train.to(device)
-            x_test, y_test = x_test.to(device), y_test.to(device)
-
-        ## Initiate RNN model
-        rnn = RNN_MTL(task=task_name, nature_stim=nature_stim, n_nodes=t_dict['n_nodes'])  # Create RNN class
-        if use_gpu:
-            rnn.to(device)
-        opt = torch.optim.SGD(rnn.parameters(), lr=t_dict['learning_rate'])  # call optimiser from pytorhc
-        rnn.set_info(param_dict={**d_dict, **t_dict})
-        rnn.info_dict['type_task'] = type_task
-        rnn.info_dict['train_task'] = train_task
-        rnn.info_dict['late_s2'] = late_s2
-
-        ## Train with BPTT
-        rnn = bptt_training(rnn=rnn, optimiser=opt, dict_training_params=t_dict,
-                            x_train=x_train, x_test=x_test, y_train=y_train, y_test=y_test,
-                            verbose=0, late_s2=late_s2, use_gpu=use_gpu)
-
-        # ## Decode cross temporally
-        # score_mat, decoder_dict, _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
-        #                                                 n_samples=None, ratio_train=0.8, verbose=False,
-        #                                                 late_s2=late_s2)
-
-        ## Save results:
-        rnn.save_model(folder=save_folder)
-
-
-
     try:
         if use_multiproc:
-            pool = ThreadPool(n_threads)
-            results = pool.map(execute_rnn_training, range(n_simulations))
+            pool = Pool(n_threads)
+            # nn, n_simulations, d_dict, nature_stim='',
+            # type_task='', task_name='', device='', late_s2=False, 
+            # train_task='', save_folder='', use_gpu=False
+            results = pool.starmap(execute_rnn_training, zip(range(n_simulations), irep(n_simulations),
+                            irep(t_dict), irep(d_dict), irep(nature_stim), irep(type_task), irep(task_name),
+                            irep(device), irep(late_s2), irep(train_task), irep(save_folder), irep(False)))
         else:
             for nn in range(n_simulations):
-                execute_rnn_training(nn=nn, use_gpu=use_gpu)
+                execute_rnn_training(nn=nn, n_simulations=n_simulations, t_dict=t_dict, d_dict=d_dict, nature_stim=nature_stim,
+                                    type_task=type_task, task_name=task_name, device=device, late_s2=late_s2, 
+                                    train_task=train_task, save_folder=save_folder, use_gpu=use_gpu)
     except KeyboardInterrupt:
         print('KeyboardInterrupt, exit')
 
@@ -596,11 +605,12 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=False,
 
 def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                  train_task_list=['pred_only', 'spec_only', 'pred_spec'],
-                 sparsity_list=[5e-3], n_sim=10, use_gpu=False):
+                 sparsity_list=[5e-3], n_sim=10, use_gpu=False, sweep_n_nodes=False):
 
     if use_gpu:
         torch.set_default_tensor_type(torch.cuda.FloatTensor)
-
+    if sweep_n_nodes:
+        assert len(train_task_list) == 1 and train_task_list[0] == 'pred_only'
     # Data parameters dictionary
     d_dict = {'n_total': 1000,  # total number of data sequences
              'ratio_train': 0.8,
@@ -629,22 +639,37 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
         for nature_stim in nature_stim_list:
             for type_task in type_task_list:
                 for train_task in train_task_list:
-                    parent_folder = f'models/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
-                    if not os.path.exists(parent_folder):
-                        os.makedirs(parent_folder)
-                        for child_folder in ['pred_only', f'{type_task}_only', f'pred_{type_task}']:
-                            os.makedirs(parent_folder + child_folder)
-                        print(f'Created directory {parent_folder} from {os.getcwd()}')
+                    if sweep_n_nodes:
+                        parent_folder = f'models/sweep_n_nodes/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
+                        if not os.path.exists(parent_folder):
+                            os.makedirs(parent_folder)
 
-                    if train_task == 'pred_only':
-                        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
-                                            save_folder=parent_folder + f'pred_only/', use_gpu=use_gpu,
-                                            late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='pred_only')
-                    elif train_task == 'spec_only':
-                        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
-                                            save_folder=parent_folder + f'{type_task}_only/', use_gpu=use_gpu,
-                                            late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='spec_only')
-                    elif train_task == 'pred_spec':
-                        init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
-                                            save_folder=parent_folder + f'pred_{type_task}/', use_gpu=use_gpu,
-                                            late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='pred_spec')
+                        for n_nodes in [5, 10, 15, 20, 25]:
+                            child_folder = f'{n_nodes}_nodes/pred_only/'
+                            if not os.path.exists(parent_folder + child_folder):
+                                os.makedirs(parent_folder + child_folder)
+                            
+                            t_dict['n_nodes'] = n_nodes
+                            init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
+                                                save_folder=parent_folder + child_folder, use_gpu=use_gpu,
+                                                late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='pred_only')
+                    else:
+                        parent_folder = f'models/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
+                        if not os.path.exists(parent_folder):
+                            os.makedirs(parent_folder)
+                        for child_folder in ['pred_only', f'{type_task}_only', f'pred_{type_task}']:
+                            if not os.path.exists(parent_folder + child_folder):
+                                os.makedirs(parent_folder + child_folder)
+    
+                        if train_task == 'pred_only':
+                            init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
+                                                save_folder=parent_folder + f'pred_only/', use_gpu=use_gpu,
+                                                late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='pred_only')
+                        elif train_task == 'spec_only':
+                            init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
+                                                save_folder=parent_folder + f'{type_task}_only/', use_gpu=use_gpu,
+                                                late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='spec_only')
+                        elif train_task == 'pred_spec':
+                            init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
+                                                save_folder=parent_folder + f'pred_{type_task}/', use_gpu=use_gpu,
+                                                late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='pred_spec')
