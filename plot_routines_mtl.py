@@ -48,7 +48,8 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
                     plot_top=True, plot_bottom=True, list_top=None, lw=3, plot_total=True,
                     label_dict_keys = {x: x for x in ['dmc', 'dms', 'pred', 'S2', 'G', 'G1', 'G2',
                                                             '0', '0_postS1', '0_postS2', '0_postG']},
-                    linestyle_custom_dict={}, colour_custom_dict={}):
+                    linestyle_custom_dict={}, colour_custom_dict={},
+                    plot_std=True, plot_indiv=False):
     if ax_top is None and plot_top:
         ax_top = plt.subplot(211)
     if ax_bottom is None and plot_bottom:
@@ -74,10 +75,7 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
             assert rnn.info_dict['n_epochs'] == n_tp
         for key, arr in rnn.test_loss_split.items():
             # if key != 'pred':
-            try:
-                conv_dict[key][i_rnn, :] = arr.copy()
-            except ValueError:
-                print(rnn, key, arr)
+            conv_dict[key][i_rnn, :] = arr.copy()
         if plot_total:
             conv_dict['pred_sep'][i_rnn, :] = np.sum([conv_dict[key][i_rnn, :] for key in ['0', 'S2', 'G']], 0)
 
@@ -103,14 +101,21 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
                 # print(key)
                 # print(label_dict_keys.keys(), linestyle_dict_keys.keys(), colour_dict_keys.keys())
                 ax_top.plot(plot_arr, label=label_dict_keys[key], linestyle=linestyle_dict_keys[key], linewidth=lw, color=colour_dict_keys[key])
-                ax_top.fill_between(x=np.arange(len(plot_arr)), y1=plot_arr - np.std(mat, 0),
-                                    y2=plot_arr + np.std(mat, 0), alpha=0.2, color=colour_dict_keys[key])
+                if plot_std:
+                    ax_top.fill_between(x=np.arange(len(plot_arr)), y1=plot_arr - np.std(mat, 0),
+                                        y2=plot_arr + np.std(mat, 0), alpha=0.2, color=colour_dict_keys[key])
+                if plot_indiv:
+                    for i_rnn in range(mat.shape[0]):
+                        ax_top.plot(mat[i_rnn, :], label=None, linestyle=linestyle_dict_keys[key],
+                                    linewidth=1, color=colour_dict_keys[key])
+
                 i_plot_total += 1
         if plot_bottom:
             if key == 'L1':
                 ax_bottom.plot(plot_arr, label=key, linestyle='-', linewidth=lw, color=colour_dict_keys[key])
-                ax_bottom.fill_between(x=np.arange(len(plot_arr)), y1=plot_arr - np.std(mat, 0),
-                                    y2=plot_arr + np.std(mat, 0), alpha=0.2, color=colour_dict_keys[key])
+                if plot_std:
+                    ax_bottom.fill_between(x=np.arange(len(plot_arr)), y1=plot_arr - np.std(mat, 0),
+                                        y2=plot_arr + np.std(mat, 0), alpha=0.2, color=colour_dict_keys[key])
                 i_plot_total += 1
     if plot_top:
         ax_top.set_ylabel('Cross entropy ' + r'$H$')
@@ -127,7 +132,8 @@ def len_data_files(dir_path):
     return len([x for x in os.listdir(dir_path) if x[-5:] == '.data'])
 
 def plot_split_perf_custom(folder_pred=None, folder_dmcpred=None, folder_dmc=None, ax=None,
-                           plot_legend=True, legend_anchor=(1, 1), task_type='dmc'):
+                           plot_legend=True, legend_anchor=(1, 1), task_type='dmc',
+                           plot_std=True, plot_indiv=False):
     if ax is None:
         ax = plt.subplot(111)
 
@@ -135,12 +141,14 @@ def plot_split_perf_custom(folder_pred=None, folder_dmcpred=None, folder_dmc=Non
     if folder_pred is not None:
         _ = plot_split_perf(rnn_folder=folder_pred, list_top=['pred'], lw=5,
                             linestyle_custom_dict={'pred': '-'}, colour_custom_dict={'pred': [67 / 255, 0, 0]},
+                            plot_std=plot_std, plot_indiv=plot_indiv,
                             ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': 'H Pred' + f'    (Pred-only, N={len_data_files(folder_pred)})'})
 
     ## dmc only
     if folder_dmc is not None:
         _ = plot_split_perf(rnn_folder=folder_dmc, list_top=[task_type], lw=5, plot_total=False,
                             linestyle_custom_dict={task_type: '-'}, colour_custom_dict={task_type: [207 / 255, 143 / 255, 23 / 255]},
+                            plot_std=plot_std, plot_indiv=plot_indiv,
                             ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={task_type: f'H {task_type}' + f'   ({task_type}-only, N={len_data_files(folder_dmc)})'})
 
     ## dmc+ prediction only
@@ -149,6 +157,7 @@ def plot_split_perf_custom(folder_pred=None, folder_dmcpred=None, folder_dmc=Non
         _ = plot_split_perf(rnn_folder=folder_dmcpred, list_top=['pred', task_type], lw=5,
                             linestyle_custom_dict={'pred': ':', task_type: '-'},
                             colour_custom_dict={'pred': colour_comb, task_type: colour_comb},
+                            plot_std=plot_std, plot_indiv=plot_indiv,
                             ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': f'H Pred' + f'    (Pred & {task_type},  N={len_data_files(folder_dmcpred)})',
                                                                                            task_type: f'H {task_type}' + f'   (Pred & {task_type},  N={len_data_files(folder_dmcpred)})'})
 
@@ -156,8 +165,27 @@ def plot_split_perf_custom(folder_pred=None, folder_dmcpred=None, folder_dmc=Non
         ax.legend(frameon=False, bbox_to_anchor=legend_anchor)
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
-    ax.set_ylim([-0.2, 1.6])
+    ax.set_ylim([-0.05, 1.6])
     return ax
+
+def plot_n_nodes_sweep(parent_folder='/home/thijs/repos/rotation/models/sweep_n_nodes/7525/dmc_task/onehot/sparsity_5e-03/',
+                   plot_legend=True, ax=None, plot_std=True, plot_indiv=False):
+    list_child_folders = os.listdir(parent_folder)
+    if ax is None:
+        ax = plt.subplot(111)
+    for i_f, cfolder in enumerate(list_child_folders):
+        n_nodes = int(cfolder.split('_')[0])
+        full_folder = os.path.join(parent_folder, cfolder, 'pred_only')
+        _ = plot_split_perf(rnn_folder=full_folder, list_top=['pred'], lw=5,
+                            linestyle_custom_dict={'pred': '-'}, colour_custom_dict={'pred': color_dict_stand[i_f]},
+                            plot_std=plot_std, plot_indiv=plot_indiv,
+                            ax_top=ax, ax_bottom=None, plot_bottom=False,
+                            label_dict_keys={'pred': f'N_nodes={n_nodes} N={len_data_files(full_folder)})'})
+    if plot_legend:
+        ax.legend(frameon=False, bbox_to_anchor=(1, 1), loc='upper right')
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.set_ylim([-0.05, 1.05])
 
 def plot_example_trial(trial, ax=None, yticklabels=output_vector_labels,
                        xticklabels=time_labels_blank[1:], c_bar=True,
@@ -178,7 +206,8 @@ def plot_example_trial(trial, ax=None, yticklabels=output_vector_labels,
     return ax
 
 def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_stim='onehot',
-                                       sparsity_str='5e-03', ax=None, plot_legend=True, verbose=0):
+                                       sparsity_str='5e-03', ax=None, plot_legend=True, verbose=0,
+                                       plot_std=True, plot_indiv=False):
    base_folder = f'models/{ratio_exp_str}/{task}_task/{nature_stim}/sparsity_{sparsity_str}/'
    folders_dict = {}
    folders_dict['pred_only'] = base_folder + 'pred_only/'
@@ -188,6 +217,7 @@ def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_
    plot_split_perf_custom(folder_pred=folders_dict['pred_only'],
                           folder_dmc=folders_dict[f'{task}_only'],
                           folder_dmcpred=folders_dict[f'pred_{task}'],
+                          plot_std=plot_std, plot_indiv=plot_indiv,
                           task_type=task, ax=ax, plot_legend=plot_legend)
    plt.title(task + r'$\; P(\alpha = \beta) = $' + f'0.{ratio_exp_str[:2]},' + r'$ \; \; \lambda=$' + f'{sparsity_str}');
 
