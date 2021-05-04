@@ -225,8 +225,8 @@ class RNN_MTL(nn.Module):
         self.n_nodes = n_nodes
         self.init_std_scale = init_std_scale
         self.task = task
-        self.info_dict = {'converged': False, 'task': task, 'output_nonlin_pred': 'softmax',
-                          'output_nonlin_spec': 'softmax_relu', 'pred_loss_function': 'cross_entropy',
+        self.info_dict = {'converged': False, 'task': task, 'output_nonlin_pred': 'tanh',
+                          'output_nonlin_spec': 'softmax_relu', 'pred_loss_function': 'mean_squared_error',
                           'nature_stim': nature_stim}  # any info can be saved later
         if nature_stim == 'periodic':  # periodic stim are constrained by sum = 1, so softmax & cross-entropy are not applicable
             self.info_dict['pred_loss_function'] = 'mean_squared_error'  # also like duncker & driscoll 2020 NIPS I believe
@@ -580,7 +580,7 @@ def execute_rnn_training(nn, n_simulations, t_dict, d_dict, nature_stim='',
 
 
 def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
-                        n_threads=8, save_folder='models/', use_gpu=False,
+                        n_threads=10, save_folder='models/', use_gpu=False,
                         late_s2=False, nature_stim='onehot', type_task='dmc', train_task='pred_only'):
     assert late_s2 is False, 'not implemented'
     assert type_task in ['dms', 'dmc', 'dmrs', 'dmrc']
@@ -613,7 +613,7 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
 
 def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                  train_task_list=['pred_only', 'spec_only', 'pred_spec'],
-                 sparsity_list=[5e-3], n_sim=10, use_gpu=False, sweep_n_nodes=False):
+                 sparsity_list=[1e-1], n_sim=10, use_gpu=False, sweep_n_nodes=False):
 
     if use_gpu:
         torch.set_default_tensor_type(torch.cuda.FloatTensor)
@@ -662,7 +662,7 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                                                 save_folder=parent_folder + child_folder, use_gpu=use_gpu,
                                                 late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='pred_only')
                     else:
-                        parent_folder = f'models/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
+                        parent_folder = f'models/mls_tanh_pred/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
                         if not os.path.exists(parent_folder):
                             os.makedirs(parent_folder)
                         for child_folder in ['pred_only', f'{type_task}_only', f'pred_{type_task}']:
