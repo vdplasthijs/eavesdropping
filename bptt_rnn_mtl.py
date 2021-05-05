@@ -546,6 +546,11 @@ def execute_rnn_training(nn, n_simulations, t_dict, d_dict, nature_stim='',
                         type_task='', task_name='', device='', late_s2=False,
                         train_task='', save_folder='', use_gpu=False):
     print(f'\n-----------\nsimulation {nn}/{n_simulations}')
+
+    ## Ensure seeds change with multi processing
+    np.random.seed(np.random.get_state()[1][0] + nn)
+    print('seed:', np.random.get_state()[1][0])
+
     ## Generate data:
     tmp0, tmp1 = generate_synt_data_general(n_total=d_dict['n_total'], t_delay=d_dict['t_delay'], t_stim=d_dict['t_stim'],
                                 ratio_train=d_dict['ratio_train'], ratio_exp=d_dict['ratio_exp'],
