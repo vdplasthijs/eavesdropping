@@ -601,6 +601,9 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
     elif train_task == 'pred_spec':
         task_name = f'pred_{type_task}'
 
+
+    np.random.seed(np.random.get_state()[1][0] + 100)
+
     try:
         if use_multiproc:
             pool = Pool(n_threads)
