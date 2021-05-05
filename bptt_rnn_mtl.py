@@ -27,7 +27,7 @@ import sklearn.svm, sklearn.model_selection, sklearn.discriminant_analysis
 # import rot_utilities as ru
 # from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing import Pool
-import itertools 
+import itertools
 from itertools import repeat as irep
 
 device = 'cpu'
@@ -145,11 +145,11 @@ def fill_onehot_trials(all_seq=None, labels=None, task='dmc', pd=None):
         all_seq[:pd['n_exp_half'], :, (1 + add_task)][:, pd['slice_s2']] = 1  # exp C1
         labels[:pd['n_exp_half']] = '11'
         all_seq[pd['n_exp_half']:pd['n_half_total'], :, (2 + add_task)][:, pd['slice_s2']] = 1  #unexp C2
-        labels[pd['n_exp_half']:pd['n_half_total']] = '12'
+        labels[pd['n_exp_half']:pd['n_half_total']] = '1x'
         all_seq[pd['n_half_total']:(pd['n_half_total'] + pd['n_exp_half']), :, (2 + add_task)][:, pd['slice_s2']] = 1 # exp C2
         labels[pd['n_half_total']:(pd['n_half_total'] + pd['n_exp_half'])] = '22'
         all_seq[(pd['n_half_total'] + pd['n_exp_half']):, :, (1 + add_task)][:, pd['slice_s2']] = 1  # unexp C1
-        labels[(pd['n_half_total'] + pd['n_exp_half']):] = '21'
+        labels[(pd['n_half_total'] + pd['n_exp_half']):] = '2x'
 
     elif n_cat == 4:
         assert task == 'dms'
@@ -402,7 +402,11 @@ def specialisation_loss(y_est, y_true, model, eval_times=np.array([9, 10])):
     # assert y_true_trunc.mean() == 0.5  # make sure these are the right time points
     assert y_true_trunc.sum(2).mean() == 1, y_true_trunc.sum(2).mean()  # sum should be 1 to use cross entropy
     n_samples = y_true.shape[0]
-    ce = torch.sum(-1 * y_true_trunc * torch.log(y_est_trunc)) / n_samples  # take the mean CE over samples
+    ce = torch.sum(-1 * y_true_trunc * torch.log(y_est_trunc)) / n_samples  # take the mean CE over samples, natural log
+    # print(y_est_trunc[:, :, 0].mean())
+    # print(y_est_trunc[:, :, 1].mean())
+    # print(y_true_trunc[:, :, 0].mean())
+    # print(y_true_trunc[:, :, 1].mean())
     return ce
 
 def total_loss(y_est, y_true, model):
@@ -539,7 +543,7 @@ def bptt_training(rnn, optimiser, dict_training_params,
         return rnn
 
 def execute_rnn_training(nn, n_simulations, t_dict, d_dict, nature_stim='',
-                        type_task='', task_name='', device='', late_s2=False, 
+                        type_task='', task_name='', device='', late_s2=False,
                         train_task='', save_folder='', use_gpu=False):
     print(f'\n-----------\nsimulation {nn}/{n_simulations}')
     ## Generate data:
@@ -596,7 +600,7 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
         if use_multiproc:
             pool = Pool(n_threads)
             # nn, n_simulations, d_dict, nature_stim='',
-            # type_task='', task_name='', device='', late_s2=False, 
+            # type_task='', task_name='', device='', late_s2=False,
             # train_task='', save_folder='', use_gpu=False
             results = pool.starmap(execute_rnn_training, zip(range(n_simulations), irep(n_simulations),
                             irep(t_dict), irep(d_dict), irep(nature_stim), irep(type_task), irep(task_name),
@@ -604,7 +608,7 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
         else:
             for nn in range(n_simulations):
                 execute_rnn_training(nn=nn, n_simulations=n_simulations, t_dict=t_dict, d_dict=d_dict, nature_stim=nature_stim,
-                                    type_task=type_task, task_name=task_name, device=device, late_s2=late_s2, 
+                                    type_task=type_task, task_name=task_name, device=device, late_s2=late_s2,
                                     train_task=train_task, save_folder=save_folder, use_gpu=use_gpu)
     except KeyboardInterrupt:
         print('KeyboardInterrupt, exit')
@@ -656,7 +660,7 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                             child_folder = f'{n_nodes}_nodes/pred_only/'
                             if not os.path.exists(parent_folder + child_folder):
                                 os.makedirs(parent_folder + child_folder)
-                            
+
                             t_dict['n_nodes'] = n_nodes
                             init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
                                                 save_folder=parent_folder + child_folder, use_gpu=use_gpu,
@@ -668,7 +672,7 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                         for child_folder in ['pred_only', f'{type_task}_only', f'pred_{type_task}']:
                             if not os.path.exists(parent_folder + child_folder):
                                 os.makedirs(parent_folder + child_folder)
-    
+
                         if train_task == 'pred_only':
                             init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
                                                 save_folder=parent_folder + f'pred_only/', use_gpu=use_gpu,

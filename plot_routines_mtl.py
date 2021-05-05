@@ -44,12 +44,14 @@ def set_fontsize(font_size=12):
 
 
 def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
-                    normalise_start=True,
+                    normalise_start=False,
                     plot_top=True, plot_bottom=True, list_top=None, lw=3, plot_total=True,
                     label_dict_keys = {x: x for x in ['dmc', 'dms', 'pred', 'S2', 'G', 'G1', 'G2',
                                                             '0', '0_postS1', '0_postS2', '0_postG']},
                     linestyle_custom_dict={}, colour_custom_dict={},
                     plot_std=True, plot_indiv=False):
+    if normalise_start:
+        print('Normalising loss functions')
     if ax_top is None and plot_top:
         ax_top = plt.subplot(211)
     if ax_bottom is None and plot_bottom:
@@ -63,6 +65,7 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
     for i_rnn, rnn_name in enumerate(list_rnns):
         rnn = ru.load_rnn(rnn_name=os.path.join(rnn_folder, rnn_name))
         if i_rnn == 0:
+            print(rnn.info_dict['pred_loss_function'])
             n_tp = rnn.info_dict['n_epochs']
             # if 'simulated_annealing' in list(rnn.info_dict.keys()) and rnn.info_dict['simulated_annealing']:
             #     pass
@@ -165,7 +168,7 @@ def plot_split_perf_custom(folder_pred=None, folder_dmcpred=None, folder_dmc=Non
         ax.legend(frameon=False, bbox_to_anchor=legend_anchor)
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
-    ax.set_ylim([-0.05, 1.6])
+    ax.set_ylim([-0.05, 3.5])
     return ax
 
 def plot_n_nodes_sweep(parent_folder='/home/thijs/repos/rotation/models/sweep_n_nodes/7525/dmc_task/onehot/sparsity_5e-03/',
@@ -189,7 +192,7 @@ def plot_n_nodes_sweep(parent_folder='/home/thijs/repos/rotation/models/sweep_n_
 
 def plot_example_trial(trial, ax=None, yticklabels=output_vector_labels,
                        xticklabels=time_labels_blank[1:], c_bar=True,
-                       vmin=0, vmax=1, c_map='magma', print_labels=True):
+                       vmin=None, vmax=None, c_map='magma', print_labels=True):
     '''Plot 1 example trial'''
     if ax is None:
         ax = plt.subplot(111)

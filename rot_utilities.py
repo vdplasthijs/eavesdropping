@@ -264,7 +264,7 @@ def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='
                                         nature_stim_list=['onehot', 'periodic'],
                                         sparsity_str_list=['0e+00', '1e-05', '1e-04', '1e-03', '5e-03']):
     # nature_stim_list=['periodic']
-    sparsity_str_list = ['0e+00', '5e-06', '1e-05', '5e-05', '1e-04', '5e-04', '1e-03', '5e-03']
+    sparsity_str_list = ['0e+00', '5e-06', '1e-05', '5e-05', '1e-04', '5e-04', '1e-03', '5e-03', '1e-02', '1e-01']
     n_sim = 10
     n_loss_functions_per_sim = 4
     n_data = len(task_list) * len(nature_stim_list) * len(sparsity_str_list) * n_loss_functions_per_sim * n_sim
