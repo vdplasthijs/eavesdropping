@@ -688,7 +688,7 @@ def execute_rnn_training(nn, n_simulations, t_dict, d_dict, nature_stim='',
     ## Generate data:
     tmp0, tmp1 = generate_synt_data_general(n_total=d_dict['n_total'], t_delay=d_dict['t_delay'], t_stim=d_dict['t_stim'],
                                 ratio_train=d_dict['ratio_train'], ratio_exp=d_dict['ratio_exp'],
-                                noise_scale=d_dict['noise_scale'], late_s2=False,
+                                noise_scale=d_dict['noise_scale'], late_s2=late_s2,
                                 nature_stim=nature_stim, task=type_task)
 
     x_train, y_train, x_test, y_test = tmp0
@@ -740,7 +740,7 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
     try:
         if use_multiproc:
             pool = Pool(n_threads)
-            # nn, n_simulations, d_dict, nature_stim='',
+            # nn, n_simulations, t_dict, d_dict, nature_stim='',
             # type_task='', task_name='', device='', late_s2=False,
             # train_task='', save_folder='', use_gpu=False
             results = pool.starmap(execute_rnn_training, zip(range(n_simulations), irep(n_simulations),
