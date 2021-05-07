@@ -7,15 +7,6 @@
 
 
 import os, sys, string
-
-# num_threads = 4 # Set number of CPUs to use!
-# os.environ["MKL_NUM_THREADS"] = "%s"%num_threads
-# os.environ["NUMEXPR_NUM_THREADS"] = "%s"%num_threads
-# os.environ["OMP_NUM_THREADS"] = "%s"%num_threads
-# os.environ["OPENBLAS_NUM_THREADS"] = "%s"%num_threads
-# os.environ["VECLIB_MAXIMUM_THREADS"] = "%s"%num_threads
-# os.environ["NUMBA_NUM_THREADS"] = "%s"%num_threads
-
 import numpy as np
 import torch
 from torch import nn
@@ -42,7 +33,7 @@ def generate_synt_data_general(n_total=100, t_delay=2, t_stim=2,
 
     nature_stim: onehot, periodic, tuning
     task: dms, dmc, dmrs, dmrc, discr'''
-    assert late_s2 is False, 'Late beta not implemented'
+    # assert late_s2 is False, 'Late s2 not implemented'
     assert ratio_train <= 1 and ratio_train >= 0
     pd = {}  #parameter dictionariy
     pd['n_total'] = int(n_total)
@@ -59,19 +50,28 @@ def generate_synt_data_general(n_total=100, t_delay=2, t_stim=2,
     pd['t_delay'] = t_delay
     pd['t_stim'] = t_stim
     pd['slice_s1'] = slice(pd['t_delay'], (pd['t_delay'] + pd['t_stim']))
-    pd['slice_s2'] = slice((2 * pd['t_delay'] + pd['t_stim']), (2 * pd['t_delay'] + 2 * pd['t_stim']))
+    if late_s2 is False:
+        pd['slice_s2'] = slice((2 * pd['t_delay'] + pd['t_stim']), (2 * pd['t_delay'] + 2 * pd['t_stim']))
+    elif late_s2:
+        pd['slice_s2'] = slice((3 * pd['t_delay'] + 2 * pd['t_stim']), (3 * pd['t_delay'] + 3 * pd['t_stim']))
     ## Create data sequences of 5, 7 or 9 elements
     ## 0-0   1-A1    2-A2    3-B1    4-B2    5-G
     all_seq = np.zeros((pd['n_total'], pd['n_times'], pd['n_input']))
     labels = np.zeros(pd['n_total'], dtype='object')
-    for i_delay in range(4):  # 4 delay periods
-        all_seq[:, :, 0][:, (i_delay * pd['period']):(i_delay * pd['period'] + t_delay)] = 1
-    all_seq[:, :, 5][:, (3 * t_delay + 2 * t_stim):(3 * t_delay + 3 * t_stim)] = 1  # Go cue
+    if late_s2 is False:
+        for i_delay in range(4):  # 4 delay periods
+            all_seq[:, :, 0][:, (i_delay * pd['period']):(i_delay * pd['period'] + t_delay)] = 1
+        all_seq[:, :, 5][:, (3 * t_delay + 2 * t_stim):(3 * t_delay + 3 * t_stim)] = 1  # Go cue
+    elif late_s2:
+        for i_delay in range(3):  # 3 delay periods
+            all_seq[:, :, 0][:, (i_delay * pd['period']):(i_delay * pd['period'] + t_delay)] = 1
+        all_seq[:, :, 5][:, (3 * pd['period']):(3 * pd['period'] + t_delay)] = 1  # late Go cue
+        all_seq[:, :, 0][:, (2 * t_delay + 1 * t_stim):(2 * t_delay + 2 * t_stim)] = 1  # extra delay during regular s2 time
     ## First fill in sequence of trials, shuffle later
     if nature_stim == 'onehot':
-        all_seq, labels = fill_onehot_trials(all_seq=all_seq, labels=labels, task=task, pd=pd)
+        all_seq, labels = fill_onehot_trials(all_seq=all_seq, labels=labels, task=task, pd=pd, late_s2=late_s2)
     elif nature_stim == 'periodic':
-        all_seq, labels = fill_periodic_trials(all_seq=all_seq, labels=labels, task=task, pd=pd)
+        all_seq, labels = fill_periodic_trials(all_seq=all_seq, labels=labels, task=task, pd=pd, late_s2=late_s2)
     elif nature_stim == 'tuning':
         pass
     elif nature_stim == 'binary':
@@ -105,7 +105,10 @@ def generate_synt_data_general(n_total=100, t_delay=2, t_stim=2,
     y_test[:, :, :pd['n_input']] = y_test_pred
 
     assert y_test.shape[0] == len(labels_test)
-    slice_go_output = slice((3 * pd['t_delay'] + 2 * pd['t_stim'] - 1), (3 * pd['t_delay'] + 3 * pd['t_stim'] - 1))  # -1 b/c output is one time step ahaead from input
+    if late_s2 is False:
+        slice_go_output = slice((3 * pd['t_delay'] + 2 * pd['t_stim'] - 1), (3 * pd['t_delay'] + 3 * pd['t_stim'] - 1))  # -1 b/c output is one time step ahaead from input
+    elif late_s2 is True:
+        slice_go_output = slice((3 * pd['t_delay'] + 3 * pd['t_stim'] - 1), (4 * pd['t_delay'] + 3 * pd['t_stim'] - 1))  # -1 b/c output is one time step ahaead from input
     if task == 'dms' or task == 'dmc' or task == 'dmrs' or task == 'dmrc':  # determine matches & non matches
         # match_train = np.where(np.array([x[0] == x[1] for x in labels_train]))[0]
         # nonmatch_train = np.where(np.array([x[0] != x[1] for x in labels_train]))[0]
@@ -125,7 +128,7 @@ def generate_synt_data_general(n_total=100, t_delay=2, t_stim=2,
     return (x_train, y_train, x_test, y_test), (labels_train, labels_test)
 
 
-def fill_onehot_trials(all_seq=None, labels=None, task='dmc', pd=None):
+def fill_onehot_trials(all_seq=None, labels=None, task='dmc', pd=None, late_s2=False):
     if task == 'dmc':
         n_cat = 2
     elif task == 'dms':
@@ -134,21 +137,21 @@ def fill_onehot_trials(all_seq=None, labels=None, task='dmc', pd=None):
         assert False, f'{task} not implement for onehot'
 
     if n_cat == 2:
-        all_seq[:pd['n_half_total'], :, 1][:, pd['slice_s1']] = 1  # A1
-        all_seq[pd['n_half_total']:, :, 2][:, pd['slice_s1']] = 1  # A2
+        all_seq[:pd['n_half_total'], :, 1][:, pd['slice_s1']] = 1  # S1
+        all_seq[pd['n_half_total']:, :, 2][:, pd['slice_s1']] = 1  # S2
 
         if task == 'dmc':
             add_task = 2
         elif task == 'dms':
             add_task = 0
 
-        all_seq[:pd['n_exp_half'], :, (1 + add_task)][:, pd['slice_s2']] = 1  # exp C1
+        all_seq[:pd['n_exp_half'], :, (1 + add_task)][:, pd['slice_s2']] = 1  # exp S2-1
         labels[:pd['n_exp_half']] = '11'
-        all_seq[pd['n_exp_half']:pd['n_half_total'], :, (2 + add_task)][:, pd['slice_s2']] = 1  #unexp C2
+        all_seq[pd['n_exp_half']:pd['n_half_total'], :, (2 + add_task)][:, pd['slice_s2']] = 1  #unexp S2-2
         labels[pd['n_exp_half']:pd['n_half_total']] = '1x'
-        all_seq[pd['n_half_total']:(pd['n_half_total'] + pd['n_exp_half']), :, (2 + add_task)][:, pd['slice_s2']] = 1 # exp C2
+        all_seq[pd['n_half_total']:(pd['n_half_total'] + pd['n_exp_half']), :, (2 + add_task)][:, pd['slice_s2']] = 1 # exp S2-2
         labels[pd['n_half_total']:(pd['n_half_total'] + pd['n_exp_half'])] = '22'
-        all_seq[(pd['n_half_total'] + pd['n_exp_half']):, :, (1 + add_task)][:, pd['slice_s2']] = 1  # unexp C1
+        all_seq[(pd['n_half_total'] + pd['n_exp_half']):, :, (1 + add_task)][:, pd['slice_s2']] = 1  # unexp S2-1
         labels[(pd['n_half_total'] + pd['n_exp_half']):] = '2x'
 
     elif n_cat == 4:
@@ -159,12 +162,12 @@ def fill_onehot_trials(all_seq=None, labels=None, task='dmc', pd=None):
 
 
 
-def fill_periodic_trials(all_seq=None, labels=None, task='dmc', pd=None, n_cat=4):
+def fill_periodic_trials(all_seq=None, labels=None, task='dmc', pd=None, n_cat=4, late_s2=False):
 
     assert pd['n_total'] % n_cat == 0, 'number of categories not a factor of number of trials'
     assert task == 'dmc' or task == 'dms' or task == 'dmrs' or task == 'dmrc'
     assert n_cat < 10  # to stay within 1 digit with labelling
-
+    assert late_s2 is False, 'late s2 not implemented for periodic trials'
     ## Create periodic stim by cos & sin of angle
     rad_stim = np.array([x * 2 * np.pi / n_cat for x in range(n_cat)])
     cos_stim = np.cos(rad_stim)
@@ -391,12 +394,15 @@ def regularisation_loss(model, reg_param=None):  # default 0.001
         reg_loss += reg_param * p_set.norm(p=1)
     return reg_loss
 
-def specialisation_loss(y_est, y_true, model, eval_times=np.array([9, 10])):
+def specialisation_loss(y_est, y_true, model, eval_times=np.array([9, 10]), late_s2=False):
     '''Compute Cross Entropy of given time array eval_times.'''
     # assert not (simulated_annealing and mnm_only), f'cannot do mnm only and SA simultaneously. sa = {simulated_annealing}, mnm = {mnm_only}'
     assert model.train_spec_task
     assert y_est.shape == y_true.shape
     assert y_est.shape[1] == 13
+    if late_s2:
+        print('changing spec time! late s2')
+        eval_times = np.array([11, 12])
     y_est_trunc = y_est[:, eval_times, :][:, :, model.n_input:]  # only evaluated these time points, cut off at n_input, because spec task follows after
     y_true_trunc = y_true[:, eval_times, :][:, :, model.n_input:]
     # assert y_true_trunc.mean() == 0.5  # make sure these are the right time points
@@ -409,19 +415,19 @@ def specialisation_loss(y_est, y_true, model, eval_times=np.array([9, 10])):
     # print(y_true_trunc[:, :, 1].mean())
     return ce
 
-def total_loss(y_est, y_true, model):
+def total_loss(y_est, y_true, model, late_s2):
     if model.train_pred_task:
         pred_loss = prediction_loss(y_est=y_est, y_true=y_true, model=model)
     else:
         pred_loss = 0
     if model.train_spec_task:
-        spec_loss = specialisation_loss(y_est=y_est, y_true=y_true, model=model)
+        spec_loss = specialisation_loss(y_est=y_est, y_true=y_true, model=model, late_s2=late_s2)
     else:
         spec_loss = 0
     reg_loss = regularisation_loss(model=model)
-    total_loss = pred_loss + spec_loss + reg_loss
-    ratio_reg = reg_loss / total_loss
-    return total_loss, ratio_reg
+    total_error = pred_loss + spec_loss + reg_loss
+    ratio_reg = reg_loss / total_error
+    return total_error, ratio_reg
 
 def test_loss_append_split(y_est, y_true, model, time_prediction_array_dict=None, late_s2=False):
     if model.train_pred_task:
@@ -430,7 +436,8 @@ def test_loss_append_split(y_est, y_true, model, time_prediction_array_dict=None
                                         '0': [3, 4, 7, 8, 11, 12], '0_postS1': [3, 4],
                                         '0_postS2': [7, 8], '0_postG': [11, 12]}
         elif time_prediction_array_dict is None and late_s2 is True:
-            assert False, 'late beta not implemented'
+            time_prediction_array_dict={'S2': [9, 10], 'G': [11, 12], 'G1': [11], 'G2': [12],
+                                        '0': [3, 4, 5, 6, 7, 8], '0_postS1': [3, 4]}
         assert time_prediction_array_dict is not None and type(time_prediction_array_dict) == dict
 
         for key, eval_times in time_prediction_array_dict.items():  # compute separate times separately
@@ -444,11 +451,11 @@ def test_loss_append_split(y_est, y_true, model, time_prediction_array_dict=None
     model.test_loss_split['L1'].append(float(reg_loss.detach().numpy()))  # add to array
 
     if model.train_spec_task:
-        spec_loss = specialisation_loss(y_est=y_est, y_true=y_true, model=model)
+        spec_loss = specialisation_loss(y_est=y_est, y_true=y_true, model=model, late_s2=late_s2)
         task_name = model.info_dict['spec_task_name']
         model.test_loss_split[task_name].append(float(spec_loss.detach().numpy()))  # add to array
 
-    tot_loss, ratio_reg = total_loss(y_est=y_est, y_true=y_true, model=model)
+    tot_loss, ratio_reg = total_loss(y_est=y_est, y_true=y_true, model=model, late_s2=late_s2)
     model.test_loss_arr.append(float(tot_loss.detach().numpy()))
     model.test_loss_ratio_reg.append(float(ratio_reg.detach().numpy()))
 
@@ -472,7 +479,6 @@ def bptt_training(rnn, optimiser, dict_training_params,
     so continuation training is possible. Training can be aborted prematurely by Ctrl+C,
     and it will terminate correctly.'''
     # assert dict_training_params['bs'] == 1, 'batch size is not 1; this error is thrown because for MNM we assume it is 1 to let labels correspond to dataloadre loop'
-    assert late_s2 is False, 'not implemented'
     ## Create data loader objects:
     train_ds = TensorDataset(x_train, y_train)
     train_dl = DataLoader(train_ds, batch_size=dict_training_params['bs'])
@@ -502,7 +508,7 @@ def bptt_training(rnn, optimiser, dict_training_params,
                         rnn.to(device)
                     # curr_label = labels_train[it_train]  # this works if batch size == 1
                     full_pred = compute_full_pred(model=rnn, input_data=xb)  # predict time trace
-                    loss, _ = total_loss(y_est=full_pred, y_true=yb, model=rnn)
+                    loss, _ = total_loss(y_est=full_pred, y_true=yb, model=rnn, late_s2=late_s2)
                     loss.backward()  # compute gradients
                     optimiser.step()  # update
                     optimiser.zero_grad()   # reset
@@ -512,7 +518,7 @@ def bptt_training(rnn, optimiser, dict_training_params,
                 with torch.no_grad():  # to be sure
                     ## Compute losses for saving:
                     full_train_pred = compute_full_pred(model=rnn, input_data=x_train)
-                    train_loss, _ = total_loss(y_est=full_train_pred, y_true=y_train, model=rnn)
+                    train_loss, _ = total_loss(y_est=full_train_pred, y_true=y_train, model=rnn, late_s2=late_s2)
                     if use_gpu:
                         train_loss = train_loss.cpu()
                     rnn.train_loss_arr.append(float(train_loss.detach().numpy()))
@@ -541,6 +547,134 @@ def bptt_training(rnn, optimiser, dict_training_params,
         if verbose > 0:
             print(f'Training ended prematurely by user at epoch {epoch}.\nResults saved in RNN Class.')
         return rnn
+
+
+def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
+                  save_inplace=False, label_name='s1', sparsity_c=1e-1,
+                  bool_train_decoder=True, decoder_type='logistic_regression'):
+    n_nodes = rnn_model.info_dict['n_nodes']
+    forw_mat = {'train': np.zeros((x_train.shape[0], x_train.shape[1], n_nodes)),  # trials x time x neurons
+                 'test': np.zeros((x_test.shape[0], x_test.shape[1], n_nodes))}
+
+    rnn_model.eval()
+    with torch.no_grad():
+        n_times = x_train.shape[1]
+
+        ## Forward runs:
+        for kk in range(x_train.shape[0]):  # trial loop
+            rnn_model.init_state()
+            hidden_state = rnn_model.state  # init state
+            for tau in range(n_times):  # time loop
+                hidden_state, output = rnn_model.forward(inp=x_train[kk, tau, :],
+                                                         rnn_state=hidden_state)  # propagate
+                forw_mat['train'][kk, tau, :] = hidden_state.numpy()  # save hidden states
+
+        for kk in range(x_test.shape[0]):  # trial loop
+            rnn_model.init_state()
+            hidden_state = rnn_model.state
+            for tau in range(n_times):  # time loop
+                hidden_state, output = rnn_model.forward(inp=x_test[kk, tau, :],
+                                                         rnn_state=hidden_state)
+                forw_mat['test'][kk, tau, :] = hidden_state.numpy()
+
+        if bool_train_decoder:
+            ## Train decoder
+            assert rnn_model.info_dict['nature_stim'] == 'onehot', 'periodic not yet implemented because S2 decoding is determined by label (is not specific because of =x)'
+            s1_labels = {'train': np.array([int(x[0]) for x in labels_train]),
+                         'test': np.array([int(x[0]) for x in labels_test])}
+             # s2_labels = {'train': np.array([int(x[1]) for x in labels_train]),
+             #              'test': np.array([int(x[1]) for x in labels_test])}
+            s2_labels = {'train': np.zeros(len(labels_train)),
+                         'test': np.zeros(len(labels_test))}
+            for ds_type, labels_type in zip(('train', 'test'), (labels_train, labels_test)):
+                for i_lab, lab in enumerate(labels_type):
+                    if lab[1] == 'x':
+                        numeric_lab = ('1' if lab[0] == '2' else '2')  # opposite from first label
+                        s2_labels[ds_type][i_lab] = numeric_lab
+                    else:
+                        s2_labels[ds_type][i_lab] = lab[1]
+            if label_name == 's1':
+                labels_use = s1_labels
+            elif label_name == 's2':
+                labels_use = s2_labels
+            else:
+                assert False, f'Label name {label_name} not implemented. Please choose s1 or s2. Aborting'
+            score_mat = np.zeros((n_times, n_times))  # T x T
+            decoder_dict = {}  # save decoder per time
+            for tau in range(n_times):  # train time loop
+                # decoder_dict[tau] = sklearn.svm.LinearSVC(C=sparsity_c)  # define SVM
+                if decoder_type == 'logistic_regression':
+                    decoder_dict[tau] = sklearn.linear_model.LogisticRegression(C=sparsity_c,
+                                                            solver='saga', penalty='l1', max_iter=250)  # define log reg
+                elif decoder_type == 'LDA':
+                     decoder_dict[tau] = sklearn.discriminant_analysis.QuadraticDiscriminantAnalysis()  # define log reg
+                decoder_dict[tau].fit(X=forw_mat['train'][:, tau, :],
+                                      y=labels_use['train'])  # train SVM
+                for tt in range(n_times):  # test time loop
+                    # score_mat[tau, tt] = decoder_dict[tau].score(X=forw_mat['test'][:, tt, :],
+                    #                                              y=labels_use['test'])  # evaluate
+                    prediction = decoder_dict[tau].predict_proba(X=forw_mat['test'][:, tt, :])
+                    inds_labels = np.zeros_like(labels_use['test'], dtype='int')  # zero = class 0
+                    inds_labels[(labels_use['test'] == decoder_dict[tau].classes_[1])] = 1
+                    prob_correct = np.array([prediction[i_pred, ind] for i_pred, ind in enumerate(inds_labels)])
+                    score_mat[tau, tt] = np.mean(prob_correct)
+                    # score_mat[tau, tt] = np.exp(np.mean(np.log(prob_correct)))
+    if bool_train_decoder:
+        if save_inplace:
+            rnn_model.decoding_crosstemp_score[label_name] = score_mat
+            rnn_model.decoder_dict[label_name] = decoder_dict
+        return score_mat, decoder_dict, forw_mat
+    else:
+        return None, None, forw_mat
+
+
+def train_single_decoder_new_data(rnn, ratio_expected=0.5, label='s1',
+                                  n_samples=None, ratio_train=0.8, verbose=False,
+                                  sparsity_c=0.1, bool_train_decoder=True,
+                                  decoder_type='logistic_regression'):
+    '''Generates new data, and then trains the decoder via train_decoder()'''
+    if n_samples is None:
+        n_samples = rnn.info_dict['n_total']
+
+    ## Generate data:
+    tmp0, tmp1 = generate_synt_data_general(n_total=n_samples,
+                                   t_delay=rnn.info_dict['t_delay'],
+                                   t_stim=rnn.info_dict['t_stim'],
+                                   ratio_train=ratio_train,
+                                   ratio_exp=ratio_expected,
+                                   noise_scale=rnn.info_dict['noise_scale'],
+                                   late_s2=rnn.info_dict['late_s2'],  nature_stim=rnn.info_dict['nature_stim'],
+                                   task=rnn.info_dict['type_task'])
+    x_train, y_train, x_test, y_test = tmp0
+    labels_train, labels_test = tmp1
+    if verbose > 0:
+        print('train labels ', {x: np.sum(labels_train == x) for x in np.unique(labels_train)})
+    ## Train decoder:
+    score_mat, decoder_dict, forward_mat = train_decoder(rnn_model=rnn, x_train=x_train, x_test=x_test,
+                                           labels_train=labels_train, labels_test=labels_test,
+                                           save_inplace=True, sparsity_c=sparsity_c, label_name=label,
+                                           bool_train_decoder=bool_train_decoder, decoder_type=decoder_type)
+    forward_mat['labels_train'] = labels_train
+    forward_mat['labels_test'] = labels_test
+    return score_mat, decoder_dict, forward_mat
+
+def train_multiple_decoders(rnn_folder='models/', ratio_expected=0.5,
+                            n_samples=None, ratio_train=0.8, label='s1',
+                            reset_decoders=False):
+    '''train decoders for all RNNs in rnn_folder'''
+    rnn_list = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
+    for i_rnn, rnn_name in tqdm(enumerate(rnn_list)):
+        ## Load RNN:
+        with open(rnn_folder + rnn_name, 'rb') as f:
+            rnn = pickle.load(f)
+        if reset_decoders:
+            rnn.decoding_crosstemp_score = {}
+            rnn.decoder_dict = {}
+        _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=ratio_expected,
+                                          n_samples=n_samples, ratio_train=ratio_train,
+                                          verbose=(i_rnn == 0), label=label) # results are saved in RNN class
+        rnn.save_model(folder=rnn_folder, verbose=0)  # save results to file
+    return None
 
 def execute_rnn_training(nn, n_simulations, t_dict, d_dict, nature_stim='',
                         type_task='', task_name='', device='', late_s2=False,
@@ -591,7 +725,6 @@ def execute_rnn_training(nn, n_simulations, t_dict, d_dict, nature_stim='',
 def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
                         n_threads=10, save_folder='models/', use_gpu=False,
                         late_s2=False, nature_stim='onehot', type_task='dmc', train_task='pred_only'):
-    assert late_s2 is False, 'not implemented'
     assert type_task in ['dms', 'dmc', 'dmrs', 'dmrc']
     assert train_task in ['pred_only', 'spec_only', 'pred_spec']
     if train_task == 'pred_only':
@@ -625,7 +758,8 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
 
 def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                  train_task_list=['pred_only', 'spec_only', 'pred_spec'],
-                 sparsity_list=[1e-1], n_sim=10, use_gpu=False, sweep_n_nodes=False):
+                 sparsity_list=[1e-1], n_sim=10, use_gpu=False, sweep_n_nodes=False,
+                 late_s2=False):
 
     if use_gpu:
         torch.set_default_tensor_type(torch.cuda.FloatTensor)
@@ -672,9 +806,12 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                             t_dict['n_nodes'] = n_nodes
                             init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
                                                 save_folder=parent_folder + child_folder, use_gpu=use_gpu,
-                                                late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='pred_only')
+                                                late_s2=late_s2, nature_stim=nature_stim, type_task=type_task, train_task='pred_only')
                     else:
-                        parent_folder = f'models/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
+                        if late_s2:
+                            parent_folder = f'models/late_s2/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
+                        else:
+                            parent_folder = f'models/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
                         if not os.path.exists(parent_folder):
                             os.makedirs(parent_folder)
                         for child_folder in ['pred_only', f'{type_task}_only', f'pred_{type_task}']:
@@ -684,12 +821,12 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                         if train_task == 'pred_only':
                             init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
                                                 save_folder=parent_folder + f'pred_only/', use_gpu=use_gpu,
-                                                late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='pred_only')
+                                                late_s2=late_s2, nature_stim=nature_stim, type_task=type_task, train_task='pred_only')
                         elif train_task == 'spec_only':
                             init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
                                                 save_folder=parent_folder + f'{type_task}_only/', use_gpu=use_gpu,
-                                                late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='spec_only')
+                                                late_s2=late_s2, nature_stim=nature_stim, type_task=type_task, train_task='spec_only')
                         elif train_task == 'pred_spec':
                             init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
                                                 save_folder=parent_folder + f'pred_{type_task}/', use_gpu=use_gpu,
-                                                late_s2=False, nature_stim=nature_stim, type_task=type_task, train_task='pred_spec')
+                                                late_s2=late_s2, nature_stim=nature_stim, type_task=type_task, train_task='pred_spec')
