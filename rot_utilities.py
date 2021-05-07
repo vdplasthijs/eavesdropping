@@ -236,7 +236,8 @@ def rotation_index(mat, times_early=[4], times_late=[6]):
     rot = np.mean(elements_cross) / np.mean(elements_early)
     return rot
 
-def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=True):
+def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=False,
+                           method='integral'):
     list_rnns = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
     n_rnn = len(list_rnns)
     for i_rnn, rnn_name in enumerate(list_rnns):
@@ -256,7 +257,20 @@ def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=
         if normalise_start:
             mat = mat / np.mean(mat[:, 0])#[:, np.newaxis]
         # plot_arr = np.mean(mat, 0)
-        learn_eff[key] = np.mean(mat, 1)  # sum = integral, mean = divide by n epochs
+        if method == 'integral':
+            learn_eff[key] = np.mean(mat, 1)  # sum = integral, mean = divide by n epochs
+        elif method == 'mean_integral':
+            learn_eff[key] = np.zeros(mat.shape[0]) + np.mean(np.mean(mat, 1))
+        elif method == 'final_loss':
+            learn_eff[key] = np.mean(mat[:, -5:], 1)
+        elif method == 'half_time':
+            half_time_ar = np.zeros(mat.shape[0])
+            for i_rnn in range(mat.shape[0]):
+                # half_time_ar[i_rnn] = np.argmin(np.abs(mat[i_rnn, :] - 0.5))
+                half_time_ar[i_rnn] = np.argmin(np.diff(mat[i_rnn, :]))
+            learn_eff[key] = half_time_ar
+        else:
+            assert False, f'Method {method} not implemented!'
         assert len(learn_eff[key]) == len(list_rnns)
     return learn_eff
 

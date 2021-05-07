@@ -60,12 +60,16 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
         list_rnns = [rnn_name]
     else:
         list_rnns = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
+    list_rnns = list_rnns[10:]
+    
     # print(label_dict_keys)
     n_rnn = len(list_rnns)
     for i_rnn, rnn_name in enumerate(list_rnns):
         rnn = ru.load_rnn(rnn_name=os.path.join(rnn_folder, rnn_name))
+        # if 'dmc' in rnn.test_loss_split.keys():
+            # print(rnn.test_loss_split['dmc'][-3:])
         if i_rnn == 0:
-            print(rnn.info_dict['pred_loss_function'])
+            # print(rnn.info_dict['pred_loss_function'])
             n_tp = rnn.info_dict['n_epochs']
             # if 'simulated_annealing' in list(rnn.info_dict.keys()) and rnn.info_dict['simulated_annealing']:
             #     pass
@@ -136,28 +140,33 @@ def len_data_files(dir_path):
 
 def plot_split_perf_custom(folder_pred=None, folder_dmcpred=None, folder_dmc=None, ax=None,
                            plot_legend=True, legend_anchor=(1, 1), task_type='dmc',
-                           plot_std=True, plot_indiv=False):
+                           plot_std=True, plot_indiv=False, plot_pred=True, plot_spec=True):
     if ax is None:
         ax = plt.subplot(111)
 
     ## prediction only
-    if folder_pred is not None:
+    if folder_pred is not None and os.path.exists(folder_pred) and plot_pred:
         _ = plot_split_perf(rnn_folder=folder_pred, list_top=['pred'], lw=5,
                             linestyle_custom_dict={'pred': '-'}, colour_custom_dict={'pred': [67 / 255, 0, 0]},
                             plot_std=plot_std, plot_indiv=plot_indiv,
                             ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': 'H Pred' + f'    (Pred-only, N={len_data_files(folder_pred)})'})
 
     ## dmc only
-    if folder_dmc is not None:
+    if folder_dmc is not None and os.path.exists(folder_dmc) and plot_spec:
         _ = plot_split_perf(rnn_folder=folder_dmc, list_top=[task_type], lw=5, plot_total=False,
                             linestyle_custom_dict={task_type: '-'}, colour_custom_dict={task_type: [207 / 255, 143 / 255, 23 / 255]},
                             plot_std=plot_std, plot_indiv=plot_indiv,
                             ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={task_type: f'H {task_type}' + f'   ({task_type}-only, N={len_data_files(folder_dmc)})'})
 
     ## dmc+ prediction only
-    if folder_dmcpred is not None:
+    if folder_dmcpred is not None and os.path.exists(folder_dmcpred):
+        list_top = []
+        if plot_pred:
+            list_top.append('pred')
+        if plot_spec:
+            list_top.append(task_type)
         colour_comb = [73 / 255, 154 / 255, 215 / 255]
-        _ = plot_split_perf(rnn_folder=folder_dmcpred, list_top=['pred', task_type], lw=5,
+        _ = plot_split_perf(rnn_folder=folder_dmcpred, list_top=list_top, lw=5,
                             linestyle_custom_dict={'pred': ':', task_type: '-'},
                             colour_custom_dict={'pred': colour_comb, task_type: colour_comb},
                             plot_std=plot_std, plot_indiv=plot_indiv,
@@ -168,7 +177,10 @@ def plot_split_perf_custom(folder_pred=None, folder_dmcpred=None, folder_dmc=Non
         ax.legend(frameon=False, bbox_to_anchor=legend_anchor)
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
-    ax.set_ylim([-0.05, 3.5])
+    if plot_pred:
+        ax.set_ylim([-0.05, 3.5])
+    else:
+        ax.set_ylim([-0.05, 1.5])
     return ax
 
 def plot_n_nodes_sweep(parent_folder='/home/thijs/repos/rotation/models/sweep_n_nodes/7525/dmc_task/onehot/sparsity_5e-03/',
@@ -210,7 +222,7 @@ def plot_example_trial(trial, ax=None, yticklabels=output_vector_labels,
 
 def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_stim='onehot',
                                        sparsity_str='5e-03', ax=None, plot_legend=True, verbose=0,
-                                       plot_std=True, plot_indiv=False):
+                                       plot_std=True, plot_indiv=False, plot_pred=True, plot_spec=True):
    base_folder = f'models/{ratio_exp_str}/{task}_task/{nature_stim}/sparsity_{sparsity_str}/'
    folders_dict = {}
    folders_dict['pred_only'] = base_folder + 'pred_only/'
@@ -221,17 +233,20 @@ def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_
                           folder_dmc=folders_dict[f'{task}_only'],
                           folder_dmcpred=folders_dict[f'pred_{task}'],
                           plot_std=plot_std, plot_indiv=plot_indiv,
-                          task_type=task, ax=ax, plot_legend=plot_legend)
+                          task_type=task, ax=ax, plot_legend=plot_legend,
+                          plot_pred=plot_pred, plot_spec=plot_spec)
    plt.title(task + r'$\; P(\alpha = \beta) = $' + f'0.{ratio_exp_str[:2]},' + r'$ \; \; \lambda=$' + f'{sparsity_str}');
 
-   for key, folder_rnns in folders_dict.items():
-       list_keys = key.split('_')
-       if 'only' in list_keys:
-           list_keys.remove('only')
-       learn_eff = ru.compute_learning_index(rnn_folder=folder_rnns,
-                                             list_loss=list_keys)
-       if verbose > 0:
-           print(key, {x: (np.round(np.mean(learn_eff[x]), 4), np.round(np.std(learn_eff[x]), 4)) for x in list_keys})
+   if verbose > 0:
+
+       for key, folder_rnns in folders_dict.items():
+           if os.path.exists(folder_rnns):
+               list_keys = key.split('_')
+               if 'only' in list_keys:
+                   list_keys.remove('only')
+               learn_eff = ru.compute_learning_index(rnn_folder=folder_rnns,
+                                                     list_loss=list_keys)
+               print(key, {x: (np.round(np.mean(learn_eff[x]), 4), np.round(np.std(learn_eff[x]), 4)) for x in list_keys})
 
 def plot_learning_efficiency(task_list_tuple=(['dms', 'dmc'],), plot_difference=False):
     df = ru.calculate_all_learning_eff_indices()
@@ -258,7 +273,7 @@ def plot_learning_efficiency(task_list_tuple=(['dms', 'dmc'],), plot_difference=
             for i_nat, nat in enumerate(nature_stim_list):
                 sns.lineplot(data=spec_task_df[spec_task_df['nature_stim'] == nat], x='sparsity', y='learning_eff',
                              hue='setting', style='task', markers=True, ci=95, ax=ax[i_plot], hue_order=['multi', 'single'])
-                ax[i_plot].set_ylim([0, 1.1])
+                # ax[i_plot].set_ylim([0, 1.1])
                 ax[i_plot].set_ylabel('Learning efficiency index\n(= integral loss function)')
                 i_plot += 1
     for i_plot in range(len(ax)):
