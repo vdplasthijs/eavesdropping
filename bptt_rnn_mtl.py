@@ -161,7 +161,6 @@ def fill_onehot_trials(all_seq=None, labels=None, task='dmc', pd=None, late_s2=F
     return all_seq, labels
 
 
-
 def fill_periodic_trials(all_seq=None, labels=None, task='dmc', pd=None, n_cat=4, late_s2=False):
 
     assert pd['n_total'] % n_cat == 0, 'number of categories not a factor of number of trials'
