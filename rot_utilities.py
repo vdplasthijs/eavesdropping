@@ -328,3 +328,47 @@ def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='
 
 
     return learn_eff_df
+
+def two_digit_sci_not(x):
+    sci_not_spars = np.format_float_scientific(x, precision=0)
+    sci_not_spars = sci_not_spars[0] + sci_not_spars[2:]  # skip dot
+    return sci_not_spars
+
+def count_datasets_sparsity_sweep(super_folder='/home/thijs/repos/rotation/models/7525'):
+
+    task_folders = os.listdir(super_folder)
+    task_nat_folder_dict = {}
+    sparsity_list = []
+
+    ## Explore which tasks, nat & spars are present
+    for task_folder in task_folders:
+        nat_list = os.listdir(os.path.join(super_folder, task_folder))
+        for nat in nat_list:
+            key = task_folder.split('_')[0] + '_' + nat
+            task_nat_folder_dict[key] = os.path.join(super_folder, task_folder, nat)
+
+            sparsity_folder_list = os.listdir(task_nat_folder_dict[key])
+            sparsity_list = sparsity_list + [float(x.split('_')[1]) for x in sparsity_folder_list]
+
+    sparsity_arr = np.sort(np.unique(np.array(sparsity_list)))
+    n_ds_dict = {**{'sparsity': sparsity_arr, 'sparsity_str': [two_digit_sci_not(x) for x in sparsity_arr]},
+                 **{task_nat: np.zeros_like(sparsity_arr, dtype='int') for task_nat in task_nat_folder_dict.keys()}}  # dictionary to save numberof datasets
+
+    ## Find number of ds per setting, and add 0 for settings taht are not present
+    for task_nat, task_nat_folder in task_nat_folder_dict.items():
+        for i_spars, float_spars in enumerate(sparsity_arr):
+            sparsity_folder = 'sparsity_' + two_digit_sci_not(float_spars)
+            task_nat_spars_folder = os.path.join(task_nat_folder, sparsity_folder)
+            if os.path.exists(task_nat_spars_folder):
+                tt_folders = os.listdir(task_nat_spars_folder)  # [pred_only, dmc_only etc]
+                n_ds_arr = np.zeros(len(tt_folders))
+                for i_tt, tt_folder in enumerate(tt_folders):
+                    n_ds_arr[i_tt] = len([x for x in os.listdir(os.path.join(task_nat_spars_folder, tt_folder)) if x[-5:] == '.data'])
+                if len(np.unique(n_ds_arr)) != 1:
+                    print(f'{task_nat_spars_folder} does not have equal number of trainings: {np.unique(n_ds_arr)}')
+                n_ds_dict[task_nat][i_spars] = np.mean(n_ds_arr)  #because they are all the same anyway
+            else:
+                n_ds_dict[task_nat][i_spars] = 0
+
+    return pd.DataFrame(n_ds_dict)
+    # print(n_ds_dict)

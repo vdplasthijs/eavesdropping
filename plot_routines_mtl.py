@@ -60,8 +60,8 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
         list_rnns = [rnn_name]
     else:
         list_rnns = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
-    list_rnns = list_rnns[10:]
-    
+
+
     # print(label_dict_keys)
     n_rnn = len(list_rnns)
     for i_rnn, rnn_name in enumerate(list_rnns):
