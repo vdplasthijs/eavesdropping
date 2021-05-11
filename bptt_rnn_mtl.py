@@ -759,7 +759,7 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
 def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                  train_task_list=['pred_only', 'spec_only', 'pred_spec'],
                  sparsity_list=[1e-1], n_sim=10, use_gpu=False, sweep_n_nodes=False,
-                 late_s2=False):
+                 late_s2=False, ratio_exp=0.75):
 
     if use_gpu:
         torch.set_default_tensor_type(torch.cuda.FloatTensor)
@@ -768,7 +768,7 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
     # Data parameters dictionary
     d_dict = {'n_total': 1000,  # total number of data sequences
              'ratio_train': 0.8,
-             'ratio_exp': 0.75,  # probabilities of switching between alpha nd beta
+             'ratio_exp': ratio_exp,  # probabilities of switching between alpha nd beta
              'noise_scale': 0.15,
              't_delay': 2,
              't_stim': 2}
