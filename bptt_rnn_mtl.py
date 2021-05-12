@@ -769,7 +769,8 @@ def execute_rnn_training(nn, n_simulations, t_dict, d_dict, nature_stim='',
 
 def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
                         n_threads=10, save_folder='models/', use_gpu=False,
-                        late_s2=False, nature_stim='onehot', type_task='dmc', train_task='pred_only'):
+                        late_s2=False, nature_stim='onehot', type_task='dmc',
+                        train_task='pred_only', simulated_annealing=False, ratio_exp_array=None):
     assert type_task in ['dms', 'dmc', 'dmrs', 'dmrc']
     assert train_task in ['pred_only', 'spec_only', 'pred_spec']
     if train_task == 'pred_only':
@@ -790,7 +791,8 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
             # train_task='', save_folder='', use_gpu=False
             results = pool.starmap(execute_rnn_training, zip(range(n_simulations), irep(n_simulations),
                             irep(t_dict), irep(d_dict), irep(nature_stim), irep(type_task), irep(task_name),
-                            irep(device), irep(late_s2), irep(train_task), irep(save_folder), irep(False)))
+                            irep(device), irep(late_s2), irep(train_task), irep(save_folder), irep(False),
+                            irep(simulated_annealing), irep(ratio_exp_array)))
             pool.close()
         else:
             for nn in range(n_simulations):
@@ -805,8 +807,9 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
 def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                  train_task_list=['pred_only', 'spec_only', 'pred_spec'],
                  sparsity_list=[1e-1], n_sim=10, use_gpu=False, sweep_n_nodes=False,
-                 late_s2=False, ratio_exp=0.75):
-
+                 late_s2=False, ratio_exp=0.75, simulated_annealing=False):
+    assert (late_s2 and simulated_annealing) is False
+    assert (sweep_n_nodes and simulated_annealing) is False
     if use_gpu:
         torch.set_default_tensor_type(torch.cuda.FloatTensor)
     if sweep_n_nodes:
@@ -824,7 +827,10 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
     t_dict['n_nodes'] = 20  # number of nodes in the RNN
     t_dict['learning_rate'] = 0.002  # algorithm lr
     t_dict['bs'] = 1  # batch size
-    t_dict['n_epochs'] = 80  # training epochs
+    if simulated_annealing:
+        t_dict['n_epochs'] = 200  # training epochs
+    else:
+        t_dict['n_epochs'] = 80  # training epochs
     t_dict['check_conv'] = False  # check for convergence (and abort if converged)
     t_dict['conv_rel_tol'] = 5e-4  # assess convergence by relative difference between two epochs is smaller than this
 
@@ -852,10 +858,13 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                             t_dict['n_nodes'] = n_nodes
                             init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
                                                 save_folder=parent_folder + child_folder, use_gpu=use_gpu,
-                                                late_s2=late_s2, nature_stim=nature_stim, type_task=type_task, train_task='pred_only')
+                                                late_s2=late_s2, nature_stim=nature_stim, type_task=type_task,
+                                                train_task='pred_only', simulated_annealing=False, ratio_exp_array=None)
                     else:
                         if late_s2:
                             parent_folder = f'models/late_s2/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
+                        elif simulated_annealing:
+                            parent_folder = f'models/simulated_annealing/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
                         else:
                             parent_folder = f'models/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
                         if not os.path.exists(parent_folder):
@@ -867,12 +876,15 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                         if train_task == 'pred_only':
                             init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
                                                 save_folder=parent_folder + f'pred_only/', use_gpu=use_gpu,
-                                                late_s2=late_s2, nature_stim=nature_stim, type_task=type_task, train_task='pred_only')
+                                                late_s2=late_s2, nature_stim=nature_stim, type_task=type_task,
+                                                train_task='pred_only', simulated_annealing=simulated_annealing, ratio_exp_array=None)
                         elif train_task == 'spec_only':
                             init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
                                                 save_folder=parent_folder + f'{type_task}_only/', use_gpu=use_gpu,
-                                                late_s2=late_s2, nature_stim=nature_stim, type_task=type_task, train_task='spec_only')
+                                                late_s2=late_s2, nature_stim=nature_stim, type_task=type_task,
+                                                train_task='spec_only', simulated_annealing=simulated_annealing, ratio_exp_array=None)
                         elif train_task == 'pred_spec':
                             init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
                                                 save_folder=parent_folder + f'pred_{type_task}/', use_gpu=use_gpu,
-                                                late_s2=late_s2, nature_stim=nature_stim, type_task=type_task, train_task='pred_spec')
+                                                late_s2=late_s2, nature_stim=nature_stim, type_task=type_task,
+                                                train_task='pred_spec', simulated_annealing=simulated_annealing, ratio_exp_array=None)
