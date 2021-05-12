@@ -780,15 +780,11 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
     elif train_task == 'pred_spec':
         task_name = f'pred_{type_task}'
 
-
     np.random.seed(np.random.get_state()[1][0] + 100)
 
     try:
         if use_multiproc:
             pool = Pool(n_threads)
-            # nn, n_simulations, t_dict, d_dict, nature_stim='',
-            # type_task='', task_name='', device='', late_s2=False,
-            # train_task='', save_folder='', use_gpu=False
             results = pool.starmap(execute_rnn_training, zip(range(n_simulations), irep(n_simulations),
                             irep(t_dict), irep(d_dict), irep(nature_stim), irep(type_task), irep(task_name),
                             irep(device), irep(late_s2), irep(train_task), irep(save_folder), irep(False),
