@@ -235,7 +235,7 @@ def plot_n_nodes_sweep(parent_folder='/home/thijs/repos/rotation/models/sweep_n_
             ax.set_ylabel('Speed of convergence\nof prediction task')
         elif method == 'final_loss':
             ax.set_ylabel('Final loss\nof prediction task')
-        ax.set_title('Optimal network size', fontdict={'weight': 'bold'})
+        ax.set_title('Optimal network size\nfor various sparsity values', fontdict={'weight': 'bold'})
         ax = despine(ax)
 
 def plot_n_nodes_sweep_multiple(super_folder='/home/thijs/repos/rotation/models/sweep_n_nodes/7525/dmc_task/onehot',
@@ -278,7 +278,7 @@ def plot_late_s2_comparison(late_s2_folder='/home/thijs/repos/rotation/models/la
     else:
         ax.text(s=f'n.s.', x=0.4, y=0.628)
     ax.set_xlim(xlim)
-    ax.set_ylim(ylim) 
+    ax.set_ylim(ylim)
     ax.set_xlabel('Timing of stimulus 2')
     if method == 'integral':
         ax.set_ylabel('Speed of convergence of\nprediction task')
@@ -310,19 +310,20 @@ def plot_stl_mtl_comparison(dmc_only_folder='/home/thijs/repos/rotation/models/7
     ylim = ax.get_ylim()
     ax.plot([0.2, 0.8], [0.6, 0.6], c='k')
     if p_val < 0.01:
-        ax.text(s=f'P < 10^-{str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1)}', x=0.2, y=0.63)
+        assert str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '4'
+        ax.text(s='P < 10$^{-4}$', x=0.2, y=0.63)
     else:
         ax.text(s=f'n.s.', x=0.4, y=0.63)
     ax.set_xlim(xlim)
     # ax.set_ylim(ylim)
-    ax.set_ylim([-0.05, 1.5])
+    ax.set_ylim([-0.05, 1.6])
     print(p_val, 'mtl stl')
     ax.set_xlabel('Network task setting')
     if method == 'integral':
         ax.set_ylabel('Speed of convergence of\ncategorisation task')
     elif method == 'final_loss':
         ax.set_ylabel('Final loss\nof categorisation task')
-    ax.set_title('Eavesdropping effect of MTL', fontdict={'weight': 'bold'})
+    ax.set_title('MTL networks use eavesdropping\nto learn the categorisation task', fontdict={'weight': 'bold'})
     ax = despine(ax)
 
 def plot_7525_5050_comparison(folder_50='/home/thijs/repos/rotation/models/5050/dmc_task/onehot/sparsity_5e-03/pred_dmc/',
@@ -347,18 +348,19 @@ def plot_7525_5050_comparison(folder_50='/home/thijs/repos/rotation/models/5050/
     ylim = ax.get_ylim()
     ax.plot([0.2, 0.8], [0.6, 0.6], c='k')
     if p_val < 0.01:
-        ax.text(s=f'P < 10^-{str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1)}', x=0.2, y=0.63)
+        assert str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '4', 'change str of p value'
+        ax.text(s='P < 10$^{-4}$', x=0.2, y=0.63)
     else:
         ax.text(s=f'n.s.', x=0.4, y=0.63)
     ax.set_xlim(xlim)
-    ax.set_ylim(ylim)
+    ax.set_ylim([-0.05, 1.6])
     print(p_val, 'mtl stl')
     ax.set_xlabel('Ratio ' + r"$\alpha$" + '/' + r"$\beta$")
     if method == 'integral':
         ax.set_ylabel('Speed of convergence of\ncategorisation task')
     elif method == 'final_loss':
         ax.set_ylabel('Final loss\nof categorisation task')
-    ax.set_title('Eavesdropping effect of MTL', fontdict={'weight': 'bold'})
+    ax.set_title('Correlated stimuli are required\nfor eavesdropping', fontdict={'weight': 'bold'})
     ax = despine(ax)
 
 def plot_example_trial(trial, ax=None, yticklabels=output_vector_labels,
@@ -407,12 +409,12 @@ def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_
                                                      list_loss=list_keys)
                print(key, {x: (np.round(np.mean(learn_eff[x]), 4), np.round(np.std(learn_eff[x]), 4)) for x in list_keys})
 
-def plot_learning_efficiency(task_list_tuple=(['dms', 'dmc'],), plot_difference=False,
-                             method='integral'):
-    df = ru.calculate_all_learning_eff_indices(method=method)
-    # return df
+def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False,
+                             method='integral', nature_stim_list=['periodic', 'onehot']):
+    df = ru.calculate_all_learning_eff_indices(method=method, task_list=task_list,
+                                                nature_stim_list=nature_stim_list)
+    assert len(task_list) == 2
     fig, ax = plt.subplots(1, 2, figsize=(12, 3), gridspec_kw={'wspace': 0.7})
-    nature_stim_list = ['periodic', 'onehot']
     i_plot = 0
     if plot_difference:
         tmp_df = df[[x[:4] != 'pred' for x in df['loss_comp']]].groupby(['task', 'nature_stim', 'setting','sparsity']).mean()  # compute mean for each set of conditions [ across simulations]
@@ -428,14 +430,13 @@ def plot_learning_efficiency(task_list_tuple=(['dms', 'dmc'],), plot_difference=
             ax[i_plot].set_ylabel('Difference in \nlearning efficiency index')
             i_plot += 1
     else:
-        for task_list in task_list_tuple:
-            spec_task_df = df[[x[:3] in task_list for x in df['loss_comp']]]
-            for i_nat, nat in enumerate(nature_stim_list):
-                sns.lineplot(data=spec_task_df[spec_task_df['nature_stim'] == nat], x='sparsity', y='learning_eff',
-                             hue='setting', style='task', markers=True, ci=95, ax=ax[i_plot], hue_order=['multi', 'single'])
-                # ax[i_plot].set_ylim([0, 1.1])
-                ax[i_plot].set_ylabel('Learning efficiency index\n(= integral loss function)')
-                i_plot += 1
+        spec_task_df = df[[x.split('_')[0] in task_list for x in df['loss_comp']]]
+        for i_nat, nat in enumerate(nature_stim_list):
+            sns.lineplot(data=spec_task_df[spec_task_df['nature_stim'] == nat], x='sparsity', y='learning_eff',
+                         hue='setting', style='task', markers=True, ci=95, ax=ax[i_plot], hue_order=['multi', 'single'])
+            # ax[i_plot].set_ylim([0, 1.1])
+            ax[i_plot].set_ylabel('Learning efficiency index\n(= integral loss function)')
+            i_plot += 1
     for i_plot in range(len(ax)):
         # ax[i_plot].set_xscale('log', nonposx='clip')
         ax[i_plot].set_xscale('symlog', linthreshx=2e-6)
@@ -444,3 +445,66 @@ def plot_learning_efficiency(task_list_tuple=(['dms', 'dmc'],), plot_difference=
         ax[i_plot].set_xlabel('Sparsity regularisation')
 
     return df
+
+def plot_sa_convergence(sa_folder='/home/thijs/repos/rotation/models/simulated_annealing/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc',
+                        figsize=(6, 4), plot_std=True, plot_indiv=False):
+    ratio_exp_array = None
+    for i_rnn, rnn_name in enumerate(os.listdir(sa_folder)):
+        rnn = ru.load_rnn(os.path.join(sa_folder, rnn_name))
+        assert rnn.info_dict['simulated_annealing']
+        if i_rnn == 0:
+            ratio_exp_array = rnn.info_dict['ratio_exp_array']
+        else:
+            assert (ratio_exp_array == rnn.info_dict['ratio_exp_array']).all()
+    fig = plt.figure(constrained_layout=False, figsize=figsize)
+    gs_conv = fig.add_gridspec(ncols=1, nrows=1, bottom=0, top=0.75, left=0, right=1)
+    gs_ratio = fig.add_gridspec(ncols=1, nrows=1, bottom=0.85, top=1, left=0, right=1)
+    ax_conv = fig.add_subplot(gs_conv[0])
+    ax_ratio = fig.add_subplot(gs_ratio[0])
+    plot_split_perf_custom(folder_pred=None,
+                           folder_dmc=None,
+                           folder_dmcpred=sa_folder,
+                           plot_std=plot_std, plot_indiv=plot_indiv,
+                           task_type='dmc', ax=ax_conv, plot_legend=False,
+                           plot_pred=False, plot_spec=True)
+    ax_ratio.plot(ratio_exp_array, linewidth=3, c='grey')
+    ax_ratio.set_xticklabels([])
+    despine(ax_ratio)
+    ax_ratio.set_ylabel(r'$P(\alpha = \beta)$');
+    return fig
+
+def plot_autotemp_s1_decoding(parent_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/',
+                              ax=None):
+
+    if ax is None:
+        ax = plt.subplot(111)
+
+    child_folders = os.listdir(parent_folder)
+
+    for cf in child_folders:
+        rnn_folder = os.path.join(parent_folder, cf + '/')
+        bpm.train_multiple_decoders(rnn_folder=rnn_folder, ratio_expected=0.5,
+                                    n_samples=None, ratio_train=0.8, label='s1',
+                                    reset_decoders=True, skip_if_already_decoded=True)  # check if decoding has been done before
+    autotemp_dec_dict = {}
+    n_tp = 13  # for t_stim = 2 and t_dleay = 2
+    for cf in child_folders:
+        rnn_folder = os.path.join(parent_folder, cf + '/')
+        list_rnns = os.listdir(rnn_folder)
+        autotemp_dec_dict[cf] = np.zeros((len(list_rnns), n_tp))
+        for i_rnn, rnn_name in enumerate(list_rnns):
+            rnn = ru.load_rnn(os.path.join(rnn_folder, rnn_name))
+            # print(rnn, rnn.decoding_crosstemp_score)
+            autotemp_score = rnn.decoding_crosstemp_score['s1'].diagonal()
+            autotemp_dec_dict[cf][i_rnn, :] = autotemp_score
+        mean_dec = autotemp_dec_dict[cf].mean(0)
+        std_dec = autotemp_dec_dict[cf].std(0)
+        ax.plot(mean_dec, linewidth=3, label=cf)
+        ax.fill_between(x=np.arange(n_tp), y1=mean_dec - std_dec, y2=mean_dec + std_dec, alpha=0.3)
+    ax.legend()
+    ax.set_xticks(np.arange(n_tp))
+    ax.set_xticklabels(time_labels_blank[1:])
+    ax.set_xlabel('Time')
+    ax.set_ylabel('S1 decoding accuracy')
+    ax.set_title('S1 memory')
+    despine(ax)

@@ -239,6 +239,9 @@ def rotation_index(mat, times_early=[4], times_late=[6]):
 def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=False,
                            method='integral'):
     list_rnns = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
+    if len(list_rnns) > 20:
+        list_rnns = list_rnns[:20]
+        print(f'list rnns shortened for {rnn_folder}')
     n_rnn = len(list_rnns)
     for i_rnn, rnn_name in enumerate(list_rnns):
         rnn = load_rnn(os.path.join(rnn_folder, rnn_name))
@@ -276,7 +279,7 @@ def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=
     return learn_eff
 
 def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='7525',
-                                       nature_stim_list=['onehot'], method='integral',
+                                       nature_stim_list=['onehot', 'periodic'], method='integral',
                                        sparsity_str_list = ['0e+00', '1e-06', '5e-06', '1e-05', '5e-05', '1e-04', '5e-04', '1e-03', '5e-03', '1e-02', '1e-01']):
 
     n_sim = 20

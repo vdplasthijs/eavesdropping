@@ -331,12 +331,13 @@ class RNN_MTL(nn.Module):
         for key, val in param_dict.items():
             self.info_dict[key] = val  # overwrites
 
-    def save_model(self, folder=None, verbose=True, add_nnodes=False):  # redefine because we want to change saving name
+    def save_model(self, folder=None, verbose=True, add_nnodes=False, allow_name_change=True):  # redefine because we want to change saving name
         '''Export this RNN model to folder. If self.file_name is None, it is saved  under
         a timestamp.'''
         dt = datetime.datetime.now()
         timestamp = str(dt.date()) + '-' + str(dt.hour).zfill(2) + str(dt.minute).zfill(2)
         self.info_dict['timestamp'] = timestamp
+        current_suffix = None
         if self.file_name is None:
             if add_nnodes is False:
                 self.rnn_name = f'rnn-mnm_{timestamp}'
@@ -344,19 +345,28 @@ class RNN_MTL(nn.Module):
             else:
                 self.rnn_name = f'rnn-mnm_n{self.info_dict["n_nodes"]}_{timestamp}'
                 self.file_name = f'rnn-mnm_n{self.info_dict["n_nodes"]}_{timestamp}.data'
+        else:
+            current_timestamp_suffix = self.full_path.split('/')[-1].split('-')[-1][:-5]
+            if len(current_timestamp_suffix) > 4:  # some suffic after hhmm timestamp
+                current_suffix = current_timestamp_suffix[4:]
         if folder is None:
             folder = 'models/'
         elif folder[-1] != '/':
             folder += '/'
         self.full_path = folder + self.file_name
-        i_ascii = 0
-        suffix_list = string.ascii_letters
-        while os.path.exists(self.full_path):
-            self.full_path = folder + self.file_name[:-5] + suffix_list[i_ascii] + '.data'
-            i_ascii += 1
-            if i_ascii == len(suffix_list):
-                print('WARNING: EXPANDING ASCII LIST')
-                suffix_list = [x + x for x in suffix_list]
+        if current_suffix is not None:
+            self.full_path = folder + self.file_name[:-5] + current_suffix + '.data'
+        if allow_name_change:
+            i_ascii = 0
+            suffix_list = string.ascii_letters
+            while os.path.exists(self.full_path):
+                self.full_path = folder + self.file_name[:-5] + suffix_list[i_ascii] + '.data'
+                i_ascii += 1
+                if i_ascii == len(suffix_list):
+                    print('WARNING: EXPANDING ASCII LIST')
+                    suffix_list = [x + x for x in suffix_list]
+                    i_ascii = 0  # reset because suffix_list has been changed
+                    assert False, 'safety stop'
         file_handle = open(self.full_path, 'wb')
         pickle.dump(self, file_handle)
         if verbose > 0:
@@ -689,20 +699,25 @@ def train_single_decoder_new_data(rnn, ratio_expected=0.5, label='s1',
 
 def train_multiple_decoders(rnn_folder='models/', ratio_expected=0.5,
                             n_samples=None, ratio_train=0.8, label='s1',
-                            reset_decoders=False):
+                            reset_decoders=False, skip_if_already_decoded=True):
     '''train decoders for all RNNs in rnn_folder'''
     rnn_list = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
     for i_rnn, rnn_name in tqdm(enumerate(rnn_list)):
         ## Load RNN:
         with open(rnn_folder + rnn_name, 'rb') as f:
             rnn = pickle.load(f)
+        assert rnn_name == rnn.full_path.split('/')[-1]
+        if skip_if_already_decoded:
+            if rnn.decoding_crosstemp_score != {}:  # already decoded before
+                continue
         if reset_decoders:
             rnn.decoding_crosstemp_score = {}
             rnn.decoder_dict = {}
+
         _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=ratio_expected,
                                           n_samples=n_samples, ratio_train=ratio_train,
                                           verbose=(i_rnn == 0), label=label) # results are saved in RNN class
-        rnn.save_model(folder=rnn_folder, verbose=0)  # save results to file
+        rnn.save_model(folder=rnn_folder, verbose=0, allow_name_change=False)  # save results to file
     return None
 
 def execute_rnn_training(nn, n_simulations, t_dict, d_dict, nature_stim='',
