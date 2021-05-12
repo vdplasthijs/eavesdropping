@@ -12,7 +12,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from mpl_toolkits.axes_grid1.colorbar import colorbar as mpl_colorbar
 import seaborn as sns
 import pickle, os, sys
-import scipy.cluster, scipy.spatial
+import scipy.stats
 import sklearn.decomposition
 import bptt_rnn_mtl as bpm
 import rot_utilities as ru
@@ -42,6 +42,10 @@ def set_fontsize(font_size=12):
              'ytick.labelsize': font_size}
     plt.rcParams.update(params)
 
+def despine(ax):
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    return ax
 
 def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
                     normalise_start=False,
@@ -147,16 +151,20 @@ def plot_split_perf_custom(folder_pred=None, folder_dmcpred=None, folder_dmc=Non
     ## prediction only
     if folder_pred is not None and os.path.exists(folder_pred) and plot_pred:
         _ = plot_split_perf(rnn_folder=folder_pred, list_top=['pred'], lw=5,
-                            linestyle_custom_dict={'pred': '-'}, colour_custom_dict={'pred': [67 / 255, 0, 0]},
+                            linestyle_custom_dict={'pred': '--'}, colour_custom_dict={'pred': [67 / 255, 0, 0]},
                             plot_std=plot_std, plot_indiv=plot_indiv,
-                            ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': 'H Pred' + f'    (Pred-only, N={len_data_files(folder_pred)})'})
+                            ax_top=ax, ax_bottom=None, plot_bottom=False,
+                            label_dict_keys={'pred': f'Cat STL' + f' ({len_data_files(folder_pred)} networks)'})
+                            # label_dict_keys={'pred': 'H Pred' + f'    (Pred-only, N={len_data_files(folder_pred)})'})
 
     ## dmc only
     if folder_dmc is not None and os.path.exists(folder_dmc) and plot_spec:
         _ = plot_split_perf(rnn_folder=folder_dmc, list_top=[task_type], lw=5, plot_total=False,
                             linestyle_custom_dict={task_type: '-'}, colour_custom_dict={task_type: [207 / 255, 143 / 255, 23 / 255]},
                             plot_std=plot_std, plot_indiv=plot_indiv,
-                            ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={task_type: f'H {task_type}' + f'   ({task_type}-only, N={len_data_files(folder_dmc)})'})
+                            ax_top=ax, ax_bottom=None, plot_bottom=False,
+                            label_dict_keys={task_type: f'Cat STL' + f' ({len_data_files(folder_dmc)} networks)'})
+                            # label_dict_keys={task_type: f'H {task_type}' + f'   ({task_type}-only, N={len_data_files(folder_dmc)})'})
 
     ## dmc+ prediction only
     if folder_dmcpred is not None and os.path.exists(folder_dmcpred):
@@ -167,14 +175,17 @@ def plot_split_perf_custom(folder_pred=None, folder_dmcpred=None, folder_dmc=Non
             list_top.append(task_type)
         colour_comb = [73 / 255, 154 / 255, 215 / 255]
         _ = plot_split_perf(rnn_folder=folder_dmcpred, list_top=list_top, lw=5,
-                            linestyle_custom_dict={'pred': ':', task_type: '-'},
+                            linestyle_custom_dict={'pred': '--', task_type: '-'},
                             colour_custom_dict={'pred': colour_comb, task_type: colour_comb},
                             plot_std=plot_std, plot_indiv=plot_indiv,
-                            ax_top=ax, ax_bottom=None, plot_bottom=False, label_dict_keys={'pred': f'H Pred' + f'    (Pred & {task_type},  N={len_data_files(folder_dmcpred)})',
-                                                                                           task_type: f'H {task_type}' + f'   (Pred & {task_type},  N={len_data_files(folder_dmcpred)})'})
+                            ax_top=ax, ax_bottom=None, plot_bottom=False,
+                            label_dict_keys={'pred': f'Cat MTL' + f' ({len_data_files(folder_dmcpred)} networks)',
+                                             task_type: f'Cat MTL' + f' ({len_data_files(folder_dmcpred)} networks)'})
+                            # label_dict_keys={'pred': f'H Pred' + f'    (Pred & {task_type},  N={len_data_files(folder_dmcpred)})',
+                            #                  task_type: f'H {task_type}' + f'   (Pred & {task_type},  N={len_data_files(folder_dmcpred)})'})
 
     if plot_legend:
-        ax.legend(frameon=False, bbox_to_anchor=legend_anchor)
+        ax.legend(frameon=False)
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
     if plot_pred:
@@ -183,7 +194,7 @@ def plot_split_perf_custom(folder_pred=None, folder_dmcpred=None, folder_dmc=Non
         ax.set_ylim([-0.05, 1.5])
     return ax
 
-def plot_n_nodes_sweep(parent_folder='/home/thijs/repos/rotation/models/sweep_n_nodes/7525/dmc_task/onehot/sparsity_5e-03/',
+def plot_n_nodes_convergence(parent_folder='/home/thijs/repos/rotation/models/sweep_n_nodes/7525/dmc_task/onehot/sparsity_5e-03/',
                    plot_legend=True, ax=None, plot_std=True, plot_indiv=False):
     list_child_folders = os.listdir(parent_folder)
     if ax is None:
@@ -201,6 +212,154 @@ def plot_n_nodes_sweep(parent_folder='/home/thijs/repos/rotation/models/sweep_n_
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
     ax.set_ylim([-0.05, 1.05])
+
+def plot_n_nodes_sweep(parent_folder='/home/thijs/repos/rotation/models/sweep_n_nodes/7525/dmc_task/onehot/sparsity_5e-03/',
+                  verbose=0, ax=None, method='integral', color='k', print_labels=True):
+    list_child_folders = os.listdir(parent_folder)
+    if ax is None:
+        ax = plt.subplot(111)
+    learn_eff_dict = {}
+    for i_f, cfolder in enumerate(list_child_folders):
+        n_nodes = int(cfolder.split('_')[0])
+        full_folder = os.path.join(parent_folder, cfolder, 'pred_only')
+        tmp_dict = ru.compute_learning_index(rnn_folder=full_folder, list_loss=['pred'],
+                                                   method=method)
+        learn_eff_dict[n_nodes] = tmp_dict['pred']
+    learn_eff_df = pd.DataFrame(learn_eff_dict)
+    learn_eff_df = pd.melt(learn_eff_df, value_vars=[x for x in [5, 10, 15, 20, 25]])
+    learn_eff_df.columns = ['n_nodes', 'learning_index']
+    sns.pointplot(data=learn_eff_df, x='n_nodes', y='learning_index', ax=ax, color=color)
+    if print_labels:
+        ax.set_xlabel('Number of neurons')
+        if method == 'integral':
+            ax.set_ylabel('Speed of convergence\nof prediction task')
+        elif method == 'final_loss':
+            ax.set_ylabel('Final loss\nof prediction task')
+        ax.set_title('Optimal network size', fontdict={'weight': 'bold'})
+        ax = despine(ax)
+
+def plot_n_nodes_sweep_multiple(super_folder='/home/thijs/repos/rotation/models/sweep_n_nodes/7525/dmc_task/onehot',
+                                ax=None, method='integral'):
+    if ax is None:
+        ax = plt.subplot(111)
+    spars_folders = os.listdir(super_folder)
+    label_list = []
+    for ii, spars_folder in enumerate(spars_folders):
+        plot_n_nodes_sweep(parent_folder=os.path.join(super_folder, spars_folder), ax=ax,
+                            method=method, print_labels=(ii == len(spars_folders) - 1),
+                            color='#696969')
+        label_list.append(spars_folder.split('_')[1])
+    # ax.legend(label_list, frameon=False)
+
+def plot_late_s2_comparison(late_s2_folder='/home/thijs/repos/rotation/models/late_s2/7525/dmc_task/onehot/sparsity_5e-03/pred_only',
+                            early_s2_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_5e-03/pred_only',
+                            method='integral', ax=None):
+    if ax is None:
+        ax = plt.subplot(111)
+    learn_eff_dict = {}
+    dict_early = ru.compute_learning_index(rnn_folder=early_s2_folder, list_loss=['pred'],
+                                               method=method)
+    learn_eff_dict['early'] = dict_early['pred']
+    dict_late = ru.compute_learning_index(rnn_folder=late_s2_folder, list_loss=['pred'],
+                                               method=method)
+    learn_eff_dict['late'] = dict_late['pred']
+    learn_eff_df = pd.DataFrame(learn_eff_dict)
+    learn_eff_df = pd.melt(learn_eff_df, value_vars=['early', 'late'])
+    learn_eff_df.columns = ['s2_timing', 'learning_index']
+    sns.pointplot(data=learn_eff_df, x='s2_timing', y='learning_index', ax=ax, color='k', join=False)
+    p_val = scipy.stats.wilcoxon(dict_early['pred'], dict_late['pred'],
+                                       alternative='two-sided')[1]
+    print(p_val, 'late s2')
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    ax.plot([0.2, 0.8], [0.627, 0.627], c='k')
+    if p_val < 0.01:
+        ax.text(s=f'P < 10^-{str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1)}', x=0.2, y=0.63)
+    else:
+        ax.text(s=f'n.s.', x=0.4, y=0.628)
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim) 
+    ax.set_xlabel('Timing of stimulus 2')
+    if method == 'integral':
+        ax.set_ylabel('Speed of convergence of\nprediction task')
+    elif method == 'final_loss':
+        ax.set_ylabel('Final loss\nof prediction task')
+    ax.set_title('Stimulus timing does not cause\ndifference in learning', fontdict={'weight': 'bold'})
+    ax = despine(ax)
+    ax.set_ylim()
+
+def plot_stl_mtl_comparison(dmc_only_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_5e-03/dmc_only/',
+                            pred_dmc_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_5e-03/pred_dmc/',
+                            method='integral', ax=None):
+    if ax is None:
+        ax = plt.subplot(111)
+    learn_eff_dict = {}
+    dict_stl = ru.compute_learning_index(rnn_folder=dmc_only_folder, list_loss=['dmc'],
+                                           method=method)
+    learn_eff_dict['STL'] = dict_stl['dmc']
+    dict_mtl = ru.compute_learning_index(rnn_folder=pred_dmc_folder, list_loss=['dmc'],
+                                               method=method)
+    learn_eff_dict['MTL'] = dict_mtl['dmc']
+    learn_eff_df = pd.DataFrame(learn_eff_dict)
+    learn_eff_df = pd.melt(learn_eff_df, value_vars=['STL', 'MTL'])
+    learn_eff_df.columns = ['network_task', 'learning_index']
+    sns.pointplot(data=learn_eff_df, x='network_task', y='learning_index', ax=ax, color='k', join=False)
+    p_val = scipy.stats.wilcoxon(dict_stl['dmc'], dict_mtl['dmc'],
+                                       alternative='two-sided')[1]
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    ax.plot([0.2, 0.8], [0.6, 0.6], c='k')
+    if p_val < 0.01:
+        ax.text(s=f'P < 10^-{str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1)}', x=0.2, y=0.63)
+    else:
+        ax.text(s=f'n.s.', x=0.4, y=0.63)
+    ax.set_xlim(xlim)
+    # ax.set_ylim(ylim)
+    ax.set_ylim([-0.05, 1.5])
+    print(p_val, 'mtl stl')
+    ax.set_xlabel('Network task setting')
+    if method == 'integral':
+        ax.set_ylabel('Speed of convergence of\ncategorisation task')
+    elif method == 'final_loss':
+        ax.set_ylabel('Final loss\nof categorisation task')
+    ax.set_title('Eavesdropping effect of MTL', fontdict={'weight': 'bold'})
+    ax = despine(ax)
+
+def plot_7525_5050_comparison(folder_50='/home/thijs/repos/rotation/models/5050/dmc_task/onehot/sparsity_5e-03/pred_dmc/',
+                            folder_75='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_5e-03/pred_dmc/',
+                            method='integral', ax=None):
+    if ax is None:
+        ax = plt.subplot(111)
+    learn_eff_dict = {}
+    dict_50 = ru.compute_learning_index(rnn_folder=folder_50, list_loss=['dmc'],
+                                           method=method)
+    learn_eff_dict['50/50'] = dict_50['dmc']
+    dict_75 = ru.compute_learning_index(rnn_folder=folder_75, list_loss=['dmc'],
+                                               method=method)
+    learn_eff_dict['75/25'] = dict_75['dmc']
+    learn_eff_df = pd.DataFrame(learn_eff_dict)
+    learn_eff_df = pd.melt(learn_eff_df, value_vars=['50/50', '75/25'])
+    learn_eff_df.columns = ['ratio_alpha_beta', 'learning_index']
+    sns.pointplot(data=learn_eff_df, x='ratio_alpha_beta', y='learning_index', ax=ax, color='k', join=False)
+    p_val = scipy.stats.wilcoxon(dict_50['dmc'], dict_75['dmc'],
+                                       alternative='two-sided')[1]
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    ax.plot([0.2, 0.8], [0.6, 0.6], c='k')
+    if p_val < 0.01:
+        ax.text(s=f'P < 10^-{str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1)}', x=0.2, y=0.63)
+    else:
+        ax.text(s=f'n.s.', x=0.4, y=0.63)
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    print(p_val, 'mtl stl')
+    ax.set_xlabel('Ratio ' + r"$\alpha$" + '/' + r"$\beta$")
+    if method == 'integral':
+        ax.set_ylabel('Speed of convergence of\ncategorisation task')
+    elif method == 'final_loss':
+        ax.set_ylabel('Final loss\nof categorisation task')
+    ax.set_title('Eavesdropping effect of MTL', fontdict={'weight': 'bold'})
+    ax = despine(ax)
 
 def plot_example_trial(trial, ax=None, yticklabels=output_vector_labels,
                        xticklabels=time_labels_blank[1:], c_bar=True,
@@ -248,8 +407,9 @@ def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_
                                                      list_loss=list_keys)
                print(key, {x: (np.round(np.mean(learn_eff[x]), 4), np.round(np.std(learn_eff[x]), 4)) for x in list_keys})
 
-def plot_learning_efficiency(task_list_tuple=(['dms', 'dmc'],), plot_difference=False):
-    df = ru.calculate_all_learning_eff_indices()
+def plot_learning_efficiency(task_list_tuple=(['dms', 'dmc'],), plot_difference=False,
+                             method='integral'):
+    df = ru.calculate_all_learning_eff_indices(method=method)
     # return df
     fig, ax = plt.subplots(1, 2, figsize=(12, 3), gridspec_kw={'wspace': 0.7})
     nature_stim_list = ['periodic', 'onehot']

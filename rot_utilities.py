@@ -255,6 +255,7 @@ def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=
     for key in list_loss:
         mat = conv_dict[key]
         if normalise_start:
+            assert False, 'normalise start not implemented'
             mat = mat / np.mean(mat[:, 0])#[:, np.newaxis]
         # plot_arr = np.mean(mat, 0)
         if method == 'integral':
@@ -275,11 +276,10 @@ def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=
     return learn_eff
 
 def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='7525',
-                                        nature_stim_list=['onehot', 'periodic'],
-                                        sparsity_str_list=['0e+00', '1e-05', '1e-04', '1e-03', '5e-03']):
-    # nature_stim_list=['periodic']
-    sparsity_str_list = ['0e+00', '5e-06', '1e-05', '5e-05', '1e-04', '5e-04', '1e-03', '5e-03', '1e-02', '1e-01']
-    n_sim = 10
+                                       nature_stim_list=['onehot'], method='integral',
+                                       sparsity_str_list = ['0e+00', '1e-06', '5e-06', '1e-05', '5e-05', '1e-04', '5e-04', '1e-03', '5e-03', '1e-02', '1e-01']):
+
+    n_sim = 20
     n_loss_functions_per_sim = 4
     n_data = len(task_list) * len(nature_stim_list) * len(sparsity_str_list) * n_loss_functions_per_sim * n_sim
 
@@ -307,7 +307,8 @@ def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='
                     else:
                         suffix = '_multi'
                     learn_eff = compute_learning_index(rnn_folder=folder_rnns,
-                                                          list_loss=list_keys)
+                                                          list_loss=list_keys,
+                                                          method=method)
                     for loss_comp in list_keys:
                         for le in learn_eff[loss_comp]:
                             learn_eff_dict['task'][i_conf] = task

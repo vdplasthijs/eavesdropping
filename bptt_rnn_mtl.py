@@ -234,7 +234,7 @@ class RNN_MTL(nn.Module):
             self.info_dict['pred_loss_function'] = 'mean_squared_error'  # also like duncker & driscoll 2020 NIPS I believe
             self.info_dict['output_nonlin_pred'] = 'tanh'  # bound -1 to 1, like cos & sin
         task_names = self.task.split('_')
-        assert len(task_names) == 2
+        assert len(task_names) == 2, f'task_names {task_names} cannot be interpreted'
         if task_names[1] != 'only':
             assert task_names[0] == 'pred'
         if 'pred' in task_names:
@@ -470,30 +470,60 @@ def compute_full_pred(input_data, model):
             _, full_pred[kk, tt, :] = model(input_data[kk, tt, :])  # compute prediction at this time
     return full_pred
 
-def bptt_training(rnn, optimiser, dict_training_params,
-                  x_train, x_test, y_train, y_test, verbose=1, late_s2=False,
-                  use_gpu=False):
+def bptt_training(rnn, optimiser, dict_training_params, d_dict=None,
+                  x_train=None, x_test=None, y_train=None, y_test=None,
+                  simulated_annealing=False, ratio_exp_array=None,
+                  verbose=1, late_s2=False, use_gpu=False):
     '''Training algorithm for backpropagation through time, given a RNN model, optimiser,
     dictionary with training parameters and train and test data. RNN is NOT reset,
     so continuation training is possible. Training can be aborted prematurely by Ctrl+C,
     and it will terminate correctly.'''
     # assert dict_training_params['bs'] == 1, 'batch size is not 1; this error is thrown because for MNM we assume it is 1 to let labels correspond to dataloadre loop'
-    ## Create data loader objects:
-    train_ds = TensorDataset(x_train, y_train)
-    train_dl = DataLoader(train_ds, batch_size=dict_training_params['bs'])
+    if simulated_annealing is False:
+        assert x_train is not None  #and also the others technically
+    else:
+        assert ratio_exp_array is not None
+        assert d_dict is not None
 
-    test_ds = TensorDataset(x_test, y_test)
-    test_dl = DataLoader(test_ds, batch_size=dict_training_params['bs'])
+    if simulated_annealing is False:
+        ## Create data loader objects:
+        train_ds = TensorDataset(x_train, y_train)
+        train_dl = DataLoader(train_ds, batch_size=dict_training_params['bs'])
+
+        test_ds = TensorDataset(x_test, y_test)
+        test_dl = DataLoader(test_ds, batch_size=dict_training_params['bs'])
+        total_epochs = dict_training_params['n_epochs']
+    else:
+        print('Sim annealing')
+        total_epochs = len(ratio_exp_array)
+        assert total_epochs == dict_training_params['n_epochs']
+        rnn.info_dict['ratio_exp_array'] = ratio_exp_array
 
     prev_loss = 10  # init loss for convergence
     if 'trained_epochs' not in rnn.info_dict.keys():
         rnn.info_dict['trained_epochs'] = 0
+    else:
+        assert simulated_annealing is False, 'multiple SA sequences not implemented'
 
     ## Training procedure
     init_str = f'Initialising training; start at epoch {rnn.info_dict["trained_epochs"]}'
     try:
-        with trange(dict_training_params['n_epochs']) as tr:  # repeating epochs
+        with trange(total_epochs) as tr:  # repeating epochs
             for epoch in tr:
+                if simulated_annealing:
+                    ## create data for this epoch
+                    tmp0, tmp1 = generate_synt_data_general(n_total=d_dict['n_total'], t_delay=d_dict['t_delay'], t_stim=d_dict['t_stim'],
+                                                ratio_train=d_dict['ratio_train'], ratio_exp=ratio_exp_array[epoch],  # with current exp ratio
+                                                noise_scale=d_dict['noise_scale'], late_s2=late_s2,
+                                                nature_stim=rnn.info_dict['nature_stim'], task=rnn.info_dict['type_task'])
+
+                    x_train, y_train, x_test, y_test = tmp0
+                    train_ds = TensorDataset(x_train, y_train)
+                    train_dl = DataLoader(train_ds, batch_size=dict_training_params['bs'])
+
+                    test_ds = TensorDataset(x_test, y_test)
+                    test_dl = DataLoader(test_ds, batch_size=dict_training_params['bs'])
+
                 if epoch == 0:
                     tr.set_description(init_str)
                 else:
@@ -677,24 +707,38 @@ def train_multiple_decoders(rnn_folder='models/', ratio_expected=0.5,
 
 def execute_rnn_training(nn, n_simulations, t_dict, d_dict, nature_stim='',
                         type_task='', task_name='', device='', late_s2=False,
-                        train_task='', save_folder='', use_gpu=False):
+                        train_task='', save_folder='', use_gpu=False,
+                        simulated_annealing=False, ratio_exp_array=None):
     print(f'\n-----------\nsimulation {nn}/{n_simulations}')
 
     ## Ensure seeds change with multi processing
     np.random.seed(np.random.get_state()[1][0] + nn)
     print('seed:', np.random.get_state()[1][0])
 
-    ## Generate data:
-    tmp0, tmp1 = generate_synt_data_general(n_total=d_dict['n_total'], t_delay=d_dict['t_delay'], t_stim=d_dict['t_stim'],
-                                ratio_train=d_dict['ratio_train'], ratio_exp=d_dict['ratio_exp'],
-                                noise_scale=d_dict['noise_scale'], late_s2=late_s2,
-                                nature_stim=nature_stim, task=type_task)
+    if simulated_annealing is False:
+        ## Generate data:
+        tmp0, tmp1 = generate_synt_data_general(n_total=d_dict['n_total'], t_delay=d_dict['t_delay'], t_stim=d_dict['t_stim'],
+                                    ratio_train=d_dict['ratio_train'], ratio_exp=d_dict['ratio_exp'],
+                                    noise_scale=d_dict['noise_scale'], late_s2=late_s2,
+                                    nature_stim=nature_stim, task=type_task)
 
-    x_train, y_train, x_test, y_test = tmp0
-    labels_train, labels_test = tmp1
-    if use_gpu:
-        x_train, y_train = x_train.to(device), y_train.to(device)
-        x_test, y_test = x_test.to(device), y_test.to(device)
+        x_train, y_train, x_test, y_test = tmp0
+        labels_train, labels_test = tmp1
+        if use_gpu:
+            x_train, y_train = x_train.to(device), y_train.to(device)
+            x_test, y_test = x_test.to(device), y_test.to(device)
+        ratio_exp_array = None
+    else:
+        x_train, y_train, x_test, y_test = None, None, None, None
+        if ratio_exp_array is None:
+            total_epochs = t_dict['n_epochs']
+            assert total_epochs == 200, 'number of epochs not equal to 200 (hard set)'
+            ratio_exp_array = np.zeros(total_epochs)
+            ratio_exp_array[:int(0.2 * total_epochs)] = 0.5
+            ratio_exp_array[int(0.2 * total_epochs):int(0.4 * total_epochs)] = np.linspace(0.5, d_dict['ratio_exp'], int(0.2 * total_epochs) + 1)[:-1]
+            ratio_exp_array[int(0.4 * total_epochs):int(0.6 * total_epochs)] = d_dict['ratio_exp']
+            ratio_exp_array[int(0.6 * total_epochs):int(0.8 * total_epochs)] = np.linspace(d_dict['ratio_exp'], 0.5, int(0.2 * total_epochs) + 1)[:-1]
+            ratio_exp_array[int(0.8 * total_epochs):] = 0.5
 
     ## Initiate RNN model
     rnn = RNN_MTL(task=task_name, nature_stim=nature_stim, n_nodes=t_dict['n_nodes'])  # Create RNN class
@@ -705,11 +749,13 @@ def execute_rnn_training(nn, n_simulations, t_dict, d_dict, nature_stim='',
     rnn.info_dict['type_task'] = type_task
     rnn.info_dict['train_task'] = train_task
     rnn.info_dict['late_s2'] = late_s2
+    rnn.info_dict['simulated_annealing'] = simulated_annealing
 
     ## Train with BPTT
-    rnn = bptt_training(rnn=rnn, optimiser=opt, dict_training_params=t_dict,
+    rnn = bptt_training(rnn=rnn, optimiser=opt, dict_training_params=t_dict, d_dict=d_dict,
                         x_train=x_train, x_test=x_test, y_train=y_train, y_test=y_test,
-                        verbose=0, late_s2=late_s2, use_gpu=use_gpu)
+                        verbose=0, late_s2=late_s2, use_gpu=use_gpu,
+                        simulated_annealing=simulated_annealing, ratio_exp_array=ratio_exp_array)
 
     # ## Decode cross temporally
     # score_mat, decoder_dict, _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
@@ -745,7 +791,7 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
             results = pool.starmap(execute_rnn_training, zip(range(n_simulations), irep(n_simulations),
                             irep(t_dict), irep(d_dict), irep(nature_stim), irep(type_task), irep(task_name),
                             irep(device), irep(late_s2), irep(train_task), irep(save_folder), irep(False)))
-            pool.close()                
+            pool.close()
         else:
             for nn in range(n_simulations):
                 execute_rnn_training(nn=nn, n_simulations=n_simulations, t_dict=t_dict, d_dict=d_dict, nature_stim=nature_stim,
