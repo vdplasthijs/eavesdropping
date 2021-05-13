@@ -410,12 +410,10 @@ def specialisation_loss(y_est, y_true, model, eval_times=np.array([9, 10]), late
     assert y_est.shape == y_true.shape
     assert y_est.shape[1] == 13
     if late_s2:
-        print('changing spec time! late s2')
         eval_times = np.array([11, 12])
     y_est_trunc = y_est[:, eval_times, :][:, :, model.n_input:]  # only evaluated these time points, cut off at n_input, because spec task follows after
     y_true_trunc = y_true[:, eval_times, :][:, :, model.n_input:]
-    # assert y_true_trunc.mean() == 0.5  # make sure these are the right time points
-    assert y_true_trunc.sum(2).mean() == 1, y_true_trunc.sum(2).mean()  # sum should be 1 to use cross entropy
+    assert y_true_trunc.sum(2).mean() == 1, f'mean: {y_true_trunc.sum(2).mean()}, eval: {eval_times}, neurons {model.n_input}, shape {y_true_trunc.shape}, late_s2: {late_s2}'  # sum should be 1 to use cross entropy
     n_samples = y_true.shape[0]
     ce = torch.sum(-1 * y_true_trunc * torch.log(y_est_trunc)) / n_samples  # take the mean CE over samples, natural log
     # print(y_est_trunc[:, :, 0].mean())
@@ -563,7 +561,7 @@ def bptt_training(rnn, optimiser, dict_training_params, d_dict=None,
                     rnn.train_loss_arr.append(float(train_loss.detach().numpy()))
 
                     full_test_pred = compute_full_pred(model=rnn, input_data=x_test)
-                    test_loss_append_split(y_est=full_test_pred, y_true=y_test, model=rnn)  # append loss within function
+                    test_loss_append_split(y_est=full_test_pred, y_true=y_test, model=rnn, late_s2=late_s2)  # append loss within function
 
                     ## Inspect training loss for convergence
                     new_loss = rnn.train_loss_arr[epoch]
@@ -817,7 +815,7 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
 
 def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                  train_task_list=['pred_only', 'spec_only', 'pred_spec'],
-                 sparsity_list=[1e-1], n_sim=10, use_gpu=False, sweep_n_nodes=False,
+                 sparsity_list=[1e-3], n_sim=10, use_gpu=False, sweep_n_nodes=False,
                  late_s2=False, ratio_exp=0.75, simulated_annealing=False):
     assert (late_s2 and simulated_annealing) is False
     assert (sweep_n_nodes and simulated_annealing) is False
