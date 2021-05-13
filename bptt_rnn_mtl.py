@@ -20,6 +20,7 @@ import sklearn.svm, sklearn.model_selection, sklearn.discriminant_analysis
 from multiprocessing import Pool
 import itertools
 from itertools import repeat as irep
+import copy
 
 device = 'cpu'
 # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -481,7 +482,7 @@ def compute_full_pred(input_data, model):
 def bptt_training(rnn, optimiser, dict_training_params, d_dict=None,
                   x_train=None, x_test=None, y_train=None, y_test=None,
                   simulated_annealing=False, ratio_exp_array=None,
-                  verbose=1, late_s2=False, use_gpu=False):
+                  verbose=1, late_s2=False, use_gpu=False, save_state=False):
     '''Training algorithm for backpropagation through time, given a RNN model, optimiser,
     dictionary with training parameters and train and test data. RNN is NOT reset,
     so continuation training is possible. Training can be aborted prematurely by Ctrl+C,
@@ -513,6 +514,10 @@ def bptt_training(rnn, optimiser, dict_training_params, d_dict=None,
     else:
         assert simulated_annealing is False, 'multiple SA sequences not implemented'
 
+    if save_state:
+        if hasattr(rnn, 'saved_states_dict') is False:
+            rnn.saved_states_dict = {}
+
     ## Training procedure
     init_str = f'Initialising training; start at epoch {rnn.info_dict["trained_epochs"]}'
     try:
@@ -537,8 +542,12 @@ def bptt_training(rnn, optimiser, dict_training_params, d_dict=None,
                 else:
                     update_str = f'Epoch {epoch}/{dict_training_params["n_epochs"]}. Train loss: {np.round(prev_loss, 6)}'
                     tr.set_description(update_str)
+                if save_state:
+                    rnn.saved_states_dict[epoch] = copy.deepcopy(rnn.state_dict())  # make copy of parameters
+
                 rnn.train()  # set to train model (i.e. allow gradient computation/tracking)
                 it_train = 0
+
                 for xb, yb in train_dl:  # returns torch(n_bs x n_times x n_freq)
                     if use_gpu:
                         xb, yb = xb.to(device), yb.to(device)
@@ -576,6 +585,9 @@ def bptt_training(rnn, optimiser, dict_training_params, d_dict=None,
 
         ## Set to evaluate mode and cutoff for early termination
         rnn.eval()
+        if save_state:
+            rnn.saved_states_dict[epoch + 1] = copy.deepcopy(rnn.state_dict())  # make copy of parameters
+
         if verbose > 0:
             print('Training finished. Results saved in RNN Class')
         return rnn
@@ -718,10 +730,60 @@ def train_multiple_decoders(rnn_folder='models/', ratio_expected=0.5,
         rnn.save_model(folder=rnn_folder, verbose=0, allow_name_change=False)  # save results to file
     return None
 
+def save_pearson_corr(rnn, representation='s1', set_nans=True, save_inplace=False):
+    assert representation == 's1' or representation == 's1' or representation == 'go'
+    assert rnn.info_dict['nature_stim'] == 'onehot' and rnn.info_dict['type_task'] in ['dmc', 'dms'], 'not implemented'
+    ## get forward activity
+    _, __, forw  = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
+                                                 sparsity_c=0.1, bool_train_decoder=False)  # just gets data without training decoder
+
+    if representation == 'go':
+        labels_use_1 = np.array([x[1] != 'x' for x in forw['labels_train']])  # expected / match
+        labels_use_2 = np.array([x[1] == 'x' for x in forw['labels_train']])  # unexpected / non match
+    elif representation == 's1':
+        labels_use_1 = np.array([x[0] == '1' for x in forw['labels_train']])
+        labels_use_2 = np.array([x[0] == '2' for x in forw['labels_train']])
+    elif representation == 's2':
+        tmp_s2_labels = np.zeros(len(forw['labels_train']))
+        for i_lab, lab in enumerate(forw['labels_train']):
+            if lab[1] == 'x':
+                numeric_lab = ('1' if lab[0] == '2' else '2')  # opposite from first label
+                tmp_s2_labels[i_lab] = numeric_lab
+            else:
+                tmp_s2_labels[i_lab] = lab[1]
+        labels_use_1 = np.array([x == '1' for x in tmp_s2_labels])
+        labels_use_2 = np.array([x == '2' for x in tmp_s2_labels])
+
+    plot_diff = (forw['train'][labels_use_1, :, :].mean(0) - forw['train'][labels_use_2, :, :].mean(0))
+    corr_mat = np.corrcoef(plot_diff)
+    assert corr_mat.shape[0] == corr_mat.shape[1] and corr_mat.shape[0] == 13
+
+    if set_nans:
+        if representation == 's1':
+            ## first two are before stim so correlation is just rnn noise
+            corr_mat[:2, :] = np.nan
+            corr_mat[:, :2] = np.nan
+        elif representation == 's2' or representation == 'go':
+            assert False, 'ERROR: beta & mnm NaN setting not impelemtns yet'
+            ## late_s2 dependence
+
+    if hasattr(rnn, 'rep_corr_mat_dict') is False:
+        rnn.rep_corr_mat_dict = {}
+    rnn.rep_corr_mat_dict[representation] = corr_mat
+
+    if save_inplace:
+        assert False
+        # rnn.save_model(folder=rnn_folder, verbose=0, allow_name_change=False)  # save results to file
+
+    return corr_mat
+
+
+
 def execute_rnn_training(nn, n_simulations, t_dict, d_dict, nature_stim='',
                         type_task='', task_name='', device='', late_s2=False,
                         train_task='', save_folder='', use_gpu=False,
-                        simulated_annealing=False, ratio_exp_array=None):
+                        simulated_annealing=False, ratio_exp_array=None,
+                        save_state=False):
     print(f'\n-----------\nsimulation {nn}/{n_simulations}')
 
     ## Ensure seeds change with multi processing
@@ -768,7 +830,8 @@ def execute_rnn_training(nn, n_simulations, t_dict, d_dict, nature_stim='',
     rnn = bptt_training(rnn=rnn, optimiser=opt, dict_training_params=t_dict, d_dict=d_dict,
                         x_train=x_train, x_test=x_test, y_train=y_train, y_test=y_test,
                         verbose=0, late_s2=late_s2, use_gpu=use_gpu,
-                        simulated_annealing=simulated_annealing, ratio_exp_array=ratio_exp_array)
+                        simulated_annealing=simulated_annealing, ratio_exp_array=ratio_exp_array,
+                        save_state=save_state)
 
     # ## Decode cross temporally
     # score_mat, decoder_dict, _ = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
@@ -783,7 +846,8 @@ def execute_rnn_training(nn, n_simulations, t_dict, d_dict, nature_stim='',
 def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
                         n_threads=10, save_folder='models/', use_gpu=False,
                         late_s2=False, nature_stim='onehot', type_task='dmc',
-                        train_task='pred_only', simulated_annealing=False, ratio_exp_array=None):
+                        train_task='pred_only', simulated_annealing=False, ratio_exp_array=None,
+                        save_state=False):
     assert type_task in ['dms', 'dmc', 'dmrs', 'dmrc']
     assert train_task in ['pred_only', 'spec_only', 'pred_spec']
     if train_task == 'pred_only':
@@ -801,13 +865,14 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
             results = pool.starmap(execute_rnn_training, zip(range(n_simulations), irep(n_simulations),
                             irep(t_dict), irep(d_dict), irep(nature_stim), irep(type_task), irep(task_name),
                             irep(device), irep(late_s2), irep(train_task), irep(save_folder), irep(False),
-                            irep(simulated_annealing), irep(ratio_exp_array)))
+                            irep(simulated_annealing), irep(ratio_exp_array), irep(save_state)))
             pool.close()
         else:
-            for nn in range(n_simulations):
-                execute_rnn_training(nn=nn, n_simulations=n_simulations, t_dict=t_dict, d_dict=d_dict, nature_stim=nature_stim,
-                                    type_task=type_task, task_name=task_name, device=device, late_s2=late_s2,
-                                    train_task=train_task, save_folder=save_folder, use_gpu=use_gpu)
+            assert False, 'update this part'
+            # for nn in range(n_simulations):
+                # execute_rnn_training(nn=nn, n_simulations=n_simulations, t_dict=t_dict, d_dict=d_dict, nature_stim=nature_stim,
+                #                     type_task=type_task, task_name=task_name, device=device, late_s2=late_s2,
+                #                     train_task=train_task, save_folder=save_folder, use_gpu=use_gpu)
     except KeyboardInterrupt:
         print('KeyboardInterrupt, exit')
 
@@ -816,7 +881,8 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
 def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                  train_task_list=['pred_only', 'spec_only', 'pred_spec'],
                  sparsity_list=[1e-3], n_sim=10, use_gpu=False, sweep_n_nodes=False,
-                 late_s2=False, ratio_exp=0.75, simulated_annealing=False):
+                 late_s2=False, ratio_exp=0.75, simulated_annealing=False,
+                 save_state=False):
     assert (late_s2 and simulated_annealing) is False
     assert (sweep_n_nodes and simulated_annealing) is False
     if use_gpu:
@@ -868,14 +934,19 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                             init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
                                                 save_folder=parent_folder + child_folder, use_gpu=use_gpu,
                                                 late_s2=late_s2, nature_stim=nature_stim, type_task=type_task,
-                                                train_task='pred_only', simulated_annealing=False, ratio_exp_array=None)
+                                                train_task='pred_only', simulated_annealing=False, ratio_exp_array=None,
+                                                save_state=save_state)
                     else:
-                        if late_s2:
-                            parent_folder = f'models/late_s2/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
-                        elif simulated_annealing:
-                            parent_folder = f'models/simulated_annealing/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
+                        if save_state:
+                            mod_f = 'models/save_state'
                         else:
-                            parent_folder = f'models/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
+                            mod_f = 'models'
+                        if late_s2:
+                            parent_folder = f'{mod_f}/late_s2/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
+                        elif simulated_annealing:
+                            parent_folder = f'{mod_f}/simulated_annealing/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
+                        else:
+                            parent_folder = f'{mod_f}/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
                         if not os.path.exists(parent_folder):
                             os.makedirs(parent_folder)
                         for child_folder in ['pred_only', f'{type_task}_only', f'pred_{type_task}']:
@@ -886,14 +957,17 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                             init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
                                                 save_folder=parent_folder + f'pred_only/', use_gpu=use_gpu,
                                                 late_s2=late_s2, nature_stim=nature_stim, type_task=type_task,
-                                                train_task='pred_only', simulated_annealing=simulated_annealing, ratio_exp_array=None)
+                                                train_task='pred_only', simulated_annealing=simulated_annealing,
+                                                ratio_exp_array=None, save_state=save_state)
                         elif train_task == 'spec_only':
                             init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
                                                 save_folder=parent_folder + f'{type_task}_only/', use_gpu=use_gpu,
                                                 late_s2=late_s2, nature_stim=nature_stim, type_task=type_task,
-                                                train_task='spec_only', simulated_annealing=simulated_annealing, ratio_exp_array=None)
+                                                train_task='spec_only', simulated_annealing=simulated_annealing,
+                                                ratio_exp_array=None, save_state=save_state)
                         elif train_task == 'pred_spec':
                             init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
                                                 save_folder=parent_folder + f'pred_{type_task}/', use_gpu=use_gpu,
                                                 late_s2=late_s2, nature_stim=nature_stim, type_task=type_task,
-                                                train_task='pred_spec', simulated_annealing=simulated_annealing, ratio_exp_array=None)
+                                                train_task='pred_spec', simulated_annealing=simulated_annealing,
+                                                ratio_exp_array=None, save_state=save_state)

@@ -213,7 +213,7 @@ def plot_n_nodes_convergence(parent_folder='/home/thijs/repos/rotation/models/sw
     ax.spines['top'].set_visible(False)
     ax.set_ylim([-0.05, 1.05])
 
-def plot_n_nodes_sweep(parent_folder='/home/thijs/repos/rotation/models/sweep_n_nodes/7525/dmc_task/onehot/sparsity_5e-03/',
+def plot_n_nodes_sweep(parent_folder='/home/thijs/repos/rotation/models/sweep_n_nodes/7525/dmc_task/onehot/sparsity_1e-03/',
                   verbose=0, ax=None, method='integral', color='k', print_labels=True):
     list_child_folders = os.listdir(parent_folder)
     if ax is None:
@@ -250,9 +250,11 @@ def plot_n_nodes_sweep_multiple(super_folder='/home/thijs/repos/rotation/models/
                             color='#696969')
         label_list.append(spars_folder.split('_')[1])
     # ax.legend(label_list, frameon=False)
+    if method == 'integral':
+        ax.set_ylim([0.5, 1.05])
 
-def plot_late_s2_comparison(late_s2_folder='/home/thijs/repos/rotation/models/late_s2/7525/dmc_task/onehot/sparsity_5e-03/pred_only',
-                            early_s2_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_5e-03/pred_only',
+def plot_late_s2_comparison(late_s2_folder='/home/thijs/repos/rotation/models/late_s2/7525/dmc_task/onehot/sparsity_1e-03/pred_only',
+                            early_s2_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/pred_only',
                             method='integral', ax=None):
     if ax is None:
         ax = plt.subplot(111)
@@ -276,9 +278,10 @@ def plot_late_s2_comparison(late_s2_folder='/home/thijs/repos/rotation/models/la
     if p_val < 0.01:
         ax.text(s=f'P < 10^-{str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1)}', x=0.2, y=0.63)
     else:
-        ax.text(s=f'n.s.', x=0.4, y=0.628)
+        ax.text(s=f'n.s.', x=0.4, y=0.64)
     ax.set_xlim(xlim)
-    ax.set_ylim(ylim)
+    # ax.set_ylim(ylim)
+    ax.set_ylim([0.5, 1.05])
     ax.set_xlabel('Timing of stimulus 2')
     if method == 'integral':
         ax.set_ylabel('Speed of convergence of\nprediction task')
@@ -288,8 +291,8 @@ def plot_late_s2_comparison(late_s2_folder='/home/thijs/repos/rotation/models/la
     ax = despine(ax)
     ax.set_ylim()
 
-def plot_stl_mtl_comparison(dmc_only_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_5e-03/dmc_only/',
-                            pred_dmc_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_5e-03/pred_dmc/',
+def plot_stl_mtl_comparison(dmc_only_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/dmc_only/',
+                            pred_dmc_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
                             method='integral', ax=None):
     if ax is None:
         ax = plt.subplot(111)
@@ -310,8 +313,12 @@ def plot_stl_mtl_comparison(dmc_only_folder='/home/thijs/repos/rotation/models/7
     ylim = ax.get_ylim()
     ax.plot([0.2, 0.8], [0.6, 0.6], c='k')
     if p_val < 0.01:
-        assert str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '4'
-        ax.text(s='P < 10$^{-4}$', x=0.2, y=0.63)
+        if str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '4':
+            ax.text(s='P < 10$^{-4}$', x=0.2, y=0.63)
+        elif str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '3':
+            ax.text(s='P < 10$^{-3}$', x=0.2, y=0.63)
+        else:
+            assert False, f'p value is {p_val}'
     else:
         ax.text(s=f'n.s.', x=0.4, y=0.63)
     ax.set_xlim(xlim)
@@ -326,36 +333,44 @@ def plot_stl_mtl_comparison(dmc_only_folder='/home/thijs/repos/rotation/models/7
     ax.set_title('MTL networks use eavesdropping\nto learn the categorisation task', fontdict={'weight': 'bold'})
     ax = despine(ax)
 
-def plot_7525_5050_comparison(folder_50='/home/thijs/repos/rotation/models/5050/dmc_task/onehot/sparsity_5e-03/pred_dmc/',
-                            folder_75='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_5e-03/pred_dmc/',
+def plot_7525_5050_comparison(folder_50='/home/thijs/repos/rotation/models/5050/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
+                            folder_75='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
                             method='integral', ax=None):
     if ax is None:
         ax = plt.subplot(111)
     learn_eff_dict = {}
     dict_50 = ru.compute_learning_index(rnn_folder=folder_50, list_loss=['dmc'],
                                            method=method)
-    learn_eff_dict['50/50'] = dict_50['dmc']
+    learn_eff_dict['0.50'] = dict_50['dmc']
     dict_75 = ru.compute_learning_index(rnn_folder=folder_75, list_loss=['dmc'],
                                                method=method)
-    learn_eff_dict['75/25'] = dict_75['dmc']
+    learn_eff_dict['0.75'] = dict_75['dmc']
     learn_eff_df = pd.DataFrame(learn_eff_dict)
-    learn_eff_df = pd.melt(learn_eff_df, value_vars=['50/50', '75/25'])
+    learn_eff_df = pd.melt(learn_eff_df, value_vars=['0.50', '0.75'])
     learn_eff_df.columns = ['ratio_alpha_beta', 'learning_index']
-    sns.pointplot(data=learn_eff_df, x='ratio_alpha_beta', y='learning_index', ax=ax, color='k', join=False)
+    sns.pointplot(data=learn_eff_df, x='ratio_alpha_beta', y='learning_index',
+                  ax=ax, color='k', join=False)
     p_val = scipy.stats.wilcoxon(dict_50['dmc'], dict_75['dmc'],
                                        alternative='two-sided')[1]
     xlim = ax.get_xlim()
     ylim = ax.get_ylim()
     ax.plot([0.2, 0.8], [0.6, 0.6], c='k')
     if p_val < 0.01:
-        assert str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '4', 'change str of p value'
-        ax.text(s='P < 10$^{-4}$', x=0.2, y=0.63)
+        if str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '4':
+            ax.text(s='P < 10$^{-4}$', x=0.2, y=0.63)
+        elif str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '3':
+            ax.text(s='P < 10$^{-3}$', x=0.2, y=0.63)
+        elif str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '2':
+            ax.text(s='P < 10$^{-2}$', x=0.2, y=0.63)
+        else:
+            assert False
     else:
         ax.text(s=f'n.s.', x=0.4, y=0.63)
     ax.set_xlim(xlim)
     ax.set_ylim([-0.05, 1.6])
     print(p_val, 'mtl stl')
-    ax.set_xlabel('Ratio ' + r"$\alpha$" + '/' + r"$\beta$")
+    # ax.set_xlabel('Ratio ' + r"$\alpha$" + '/' + r"$\beta$")
+    ax.set_xlabel(r'$P(\alpha = \beta)$')
     if method == 'integral':
         ax.set_ylabel('Speed of convergence of\ncategorisation task')
     elif method == 'final_loss':
@@ -382,7 +397,7 @@ def plot_example_trial(trial, ax=None, yticklabels=output_vector_labels,
     return ax
 
 def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_stim='onehot',
-                                       sparsity_str='5e-03', ax=None, plot_legend=True, verbose=0,
+                                       sparsity_str='1e-03', ax=None, plot_legend=True, verbose=0,
                                        plot_std=True, plot_indiv=False, plot_pred=True, plot_spec=True):
    base_folder = f'models/{ratio_exp_str}/{task}_task/{nature_stim}/sparsity_{sparsity_str}/'
    folders_dict = {}
@@ -447,7 +462,7 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False,
     return df
 
 def plot_sa_convergence(sa_folder='/home/thijs/repos/rotation/models/simulated_annealing/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc',
-                        figsize=(6, 4), plot_std=True, plot_indiv=False):
+                        figsize=(6, 3), plot_std=True, plot_indiv=False):
     ratio_exp_array = None
     for i_rnn, rnn_name in enumerate(os.listdir(sa_folder)):
         rnn = ru.load_rnn(os.path.join(sa_folder, rnn_name))
@@ -469,8 +484,11 @@ def plot_sa_convergence(sa_folder='/home/thijs/repos/rotation/models/simulated_a
                            plot_pred=False, plot_spec=True)
     ax_ratio.plot(ratio_exp_array, linewidth=3, c='grey')
     ax_ratio.set_xticklabels([])
+    ax_ratio.set_ylim([0.45, 0.85])
     despine(ax_ratio)
     ax_ratio.set_ylabel(r'$P(\alpha = \beta)$');
+    ax_ratio.set_title('Simulated annealing of stimulus correlation\nenables RNNs to learn the categorisation task with 50/50',
+                        fontdict={'weight': 'bold'})
     return fig
 
 def plot_autotemp_s1_decoding(parent_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/',
@@ -503,8 +521,40 @@ def plot_autotemp_s1_decoding(parent_folder='/home/thijs/repos/rotation/models/7
         ax.fill_between(x=np.arange(n_tp), y1=mean_dec - std_dec, y2=mean_dec + std_dec, alpha=0.3)
     ax.legend()
     ax.set_xticks(np.arange(n_tp))
-    ax.set_xticklabels(time_labels_blank[1:])
+    ax.set_xticklabels(time_labels_blank[:-1])
     ax.set_xlabel('Time')
     ax.set_ylabel('S1 decoding accuracy')
     ax.set_title('S1 memory')
     despine(ax)
+
+def plot_correlation_matrix(rnn, representation='s1', ax=None):
+    if ax is None:
+        ax = plt.subplot(111)
+
+    ru.ensure_corr_mat_exists(rnn=rnn, representation=representation)
+
+    sns.heatmap(rnn.rep_corr_mat_dict[representation], cmap='BrBG', ax=ax, xticklabels=time_labels_blank[:-1], yticklabels=time_labels_blank[:-1],
+                cbar='BrBG', vmin=-1, vmax=1)
+    ax.set_yticklabels(rotation=90, labels=ax.get_yticklabels())
+    ax.set_ylabel('Time')
+    ax.set_xlabel('Time');
+    ax.invert_yaxis()
+    bottom, top = ax.get_ylim()
+    ax.set_ylim(bottom - 0.5, top + 1.5)
+
+def plot_hist_rot_indices(rnn_folder, representation='s1', ax=None):
+    if ax is None:
+        ax = plt.subplot(111)
+
+    list_rnns = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
+    rot_ind_arr = np.zeros(len(list_rnns))
+    for i_rnn, rnn_name in enumerate(list_rnns):
+        rnn = ru.load_rnn(os.path.join(rnn_folder, rnn_name))
+        ru.ensure_corr_mat_exists(rnn=rnn, representation=representation)
+        corr_mat = rnn.rep_corr_mat_dict[representation]
+        corr_s1s2_block = corr_mat[np.array([2, 3]), :][:, np.array([6, 7])]
+        assert corr_s1s2_block.shape == (2, 2)
+        rot_ind_arr[i_rnn] = np.mean(corr_s1s2_block)
+        if rnn.info_dict['task'] == 'pred_dmc':
+            print(rot_ind_arr[i_rnn], np.mean(rnn.test_loss_split['dmc'][-10:]))
+    ax.hist(rot_ind_arr, bins=np.linspace(-1, 1, 21), histtype='step', linewidth=3)

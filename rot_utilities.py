@@ -10,6 +10,7 @@
 import numpy as np
 import pickle, os
 import pandas as pd
+import bptt_rnn_mtl as bpm
 
 def angle_vecs(v1, v2):
     """Compute angle between two vectors with cosine similarity.
@@ -273,6 +274,12 @@ def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=
                 # half_time_ar[i_rnn] = np.argmin(np.abs(mat[i_rnn, :] - 0.5))
                 half_time_ar[i_rnn] = np.argmin(np.diff(mat[i_rnn, :]))
             learn_eff[key] = half_time_ar
+        elif method == 'argmin_gradient':
+            min_grad_arr = np.zeros(mat.shape[0])
+            for i_rnn in range(mat.shape[0]):
+                grad = np.gradient(mat[i_rnn, :])
+                min_grad_arr[i_rnn] = np.argmin(grad)
+            learn_eff[key] = min_grad_arr
         else:
             assert False, f'Method {method} not implemented!'
         assert len(learn_eff[key]) == len(list_rnns)
@@ -376,3 +383,10 @@ def count_datasets_sparsity_sweep(super_folder='/home/thijs/repos/rotation/model
 
     return pd.DataFrame(n_ds_dict)
     # print(n_ds_dict)
+
+def ensure_corr_mat_exists(rnn, representation='s1'):
+    ## if not pre-calculated, then calculate now:
+    if hasattr(rnn, 'rep_corr_mat_dict') is False:
+        bpm.save_pearson_corr(rnn=rnn, representation=representation)
+    elif representation not in rnn.rep_corr_mat_dict.keys():
+        bpm.save_pearson_corr(rnn=rnn, representation=representation)
