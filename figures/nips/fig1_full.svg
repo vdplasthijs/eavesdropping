@@ -18366,10 +18366,15 @@
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:4.17052174px;line-height:1;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.22342081;stroke-linecap:butt;stroke-linejoin:round"
          xml:space="preserve"><tspan
            id="tspan12503-5-1"
-           style="stroke-width:0.22342081;stroke-linecap:butt;stroke-linejoin:round"
+           style="stroke-width:0.22342081;stroke-linecap:butt;stroke-linejoin:round;font-weight:bold"
            y="343.12744"
            x="90.799789"
-           sodipodi:role="line">75% of trials: α = β </tspan></text>
+           sodipodi:role="line">Correlated stimuli:</tspan><tspan
+           style="stroke-width:0.22342081;stroke-linecap:butt;stroke-linejoin:round"
+           y="347.29797"
+           x="90.799789"
+           sodipodi:role="line"
+           id="tspan10401">75% of trials: α = β </tspan></text>
       <text
          mask="none"
          id="text22455-4-6-5-7"
@@ -18471,7 +18476,7 @@
            y="150.74434"
            style="stroke-linecap:butt;stroke-linejoin:round" /></flowRegion><flowPara
          id="flowPara9479"
-         style="stroke-linecap:butt;stroke-linejoin:round"></flowPara></flowRoot>    <text
+         style="stroke-linecap:butt;stroke-linejoin:round" /></flowRoot>    <text
        xml:space="preserve"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:4.17052174px;line-height:1;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.22342081;stroke-linecap:butt;stroke-linejoin:round"
        x="1.8749133"
@@ -18595,7 +18600,7 @@
          id="tspan14076"
          style="stroke-width:0.26458332;stroke-linecap:butt;stroke-linejoin:round"
          x="164.97995"
-         y="160.55038"></tspan></text>
+         y="160.55038" /></text>
     <text
        xml:space="preserve"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.81377792px;line-height:1;font-family:Arial;-inkscape-font-specification:'Arial, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;text-align:start;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.26458332;stroke-linecap:butt;stroke-linejoin:round"
@@ -18606,7 +18611,7 @@
          id="tspan14080"
          style="stroke-width:0.26458332;stroke-linecap:butt;stroke-linejoin:round"
          x="164.97995"
-         y="160.55038"></tspan></text>
+         y="160.55038" /></text>
     <g
        id="g39581"
        transform="translate(-4.9695428,7.3081512)"
