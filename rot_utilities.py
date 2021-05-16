@@ -11,6 +11,7 @@ import numpy as np
 import pickle, os
 import pandas as pd
 import bptt_rnn_mtl as bpm
+from tqdm import tqdm
 
 def angle_vecs(v1, v2):
     """Compute angle between two vectors with cosine similarity.
@@ -181,6 +182,7 @@ def rmse_matrix_symm(matrix, subtract=0.5):
 def load_rnn(rnn_name):
     with open(rnn_name, 'rb') as f:
         rnn = pickle.load(f)
+    rnn.eval()
     return rnn
 
 def make_df_network_size(rnn_folder):
@@ -390,3 +392,38 @@ def ensure_corr_mat_exists(rnn, representation='s1'):
         bpm.save_pearson_corr(rnn=rnn, representation=representation)
     elif representation not in rnn.rep_corr_mat_dict.keys():
         bpm.save_pearson_corr(rnn=rnn, representation=representation)
+
+def calculate_autotemp_different_epochs(rnn, epoch_list=[1, 2, 3, 4], autotemp_dec_dict=None):
+    n_tp = 13
+    assert hasattr(rnn, 'saved_states_dict'), f'{rnn} does not have saved states '
+    rnn.eval()
+    if autotemp_dec_dict is None:
+        autotemp_dec_dict = {}
+    for i_epoch, epoch in tqdm(enumerate(epoch_list)):
+        if epoch not in autotemp_dec_dict.keys():
+            rnn.load_state_dict(rnn.saved_states_dict[epoch])  ## reset network to that epoch
+            score_mat, _, __ = bpm.train_single_decoder_new_data(rnn=rnn, save_inplace=False)          ## calculate autotemp score
+            autotemp_score = score_mat.diagonal()
+            autotemp_dec_dict[epoch] = autotemp_score.copy()
+    return autotemp_dec_dict
+
+def calculate_diff_activity(forw, representation='s1'):
+    if representation == 'go':
+        labels_use_1 = np.array([x[1] != 'x' for x in forw['labels_train']])  # expected / match
+        labels_use_2 = np.array([x[1] == 'x' for x in forw['labels_train']])  # unexpected / non match
+    elif representation == 's1':
+        labels_use_1 = np.array([x[0] == '1' for x in forw['labels_train']])
+        labels_use_2 = np.array([x[0] == '2' for x in forw['labels_train']])
+    elif representation == 's2':
+        tmp_s2_labels = np.zeros(len(forw['labels_train']), dtype='object')
+        for i_lab, lab in enumerate(forw['labels_train']):
+            if lab[1] == 'x':
+                numeric_lab = ('1' if lab[0] == '2' else '2')  # opposite from first label
+                tmp_s2_labels[i_lab] = numeric_lab
+            else:
+                tmp_s2_labels[i_lab] = lab[1]
+        labels_use_1 = np.array([x == '1' for x in tmp_s2_labels])
+        labels_use_2 = np.array([x == '2' for x in tmp_s2_labels])
+
+    plot_diff = (forw['train'][labels_use_1, :, :].mean(0) - forw['train'][labels_use_2, :, :].mean(0))
+    return plot_diff.T, labels_use_1, labels_use_2

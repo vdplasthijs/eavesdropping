@@ -15,12 +15,13 @@ from torch.utils.data import TensorDataset, DataLoader
 import pickle, datetime, time, os, sys, git
 from tqdm import tqdm, trange
 import sklearn.svm, sklearn.model_selection, sklearn.discriminant_analysis
-# import rot_utilities as ru
+import rot_utilities as ru
 # from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing import Pool
 import itertools
 from itertools import repeat as irep
 import copy
+
 
 device = 'cpu'
 # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -633,8 +634,10 @@ def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
                          'test': np.array([int(x[0]) for x in labels_test])}
              # s2_labels = {'train': np.array([int(x[1]) for x in labels_train]),
              #              'test': np.array([int(x[1]) for x in labels_test])}
-            s2_labels = {'train': np.zeros(len(labels_train)),
-                         'test': np.zeros(len(labels_test))}
+            s2_labels = {'train': np.zeros(len(labels_train), dtype='int'),
+                         'test': np.zeros(len(labels_test), dtype='int')}
+            mnm_labels = {'train': np.array([int(x[0] == x[1]) for x in labels_train]),
+                          'test': np.array([int(x[0] == x[1]) for x in labels_test])}
             for ds_type, labels_type in zip(('train', 'test'), (labels_train, labels_test)):
                 for i_lab, lab in enumerate(labels_type):
                     if lab[1] == 'x':
@@ -646,8 +649,11 @@ def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
                 labels_use = s1_labels
             elif label_name == 's2':
                 labels_use = s2_labels
+                # assert False, 'double check to make sure s2_labels is handled correctly by decoder. because it is filled with floats not str'
+            elif label_name == 'go':
+                labels_use = mnm_labels
             else:
-                assert False, f'Label name {label_name} not implemented. Please choose s1 or s2. Aborting'
+                assert False, f'Label name {label_name} not implemented. Please choose s1 or s2 or go. Aborting'
             score_mat = np.zeros((n_times, n_times))  # T x T
             decoder_dict = {}  # save decoder per time
             for tau in range(n_times):  # train time loop
@@ -680,7 +686,7 @@ def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
 def train_single_decoder_new_data(rnn, ratio_expected=0.5, label='s1',
                                   n_samples=None, ratio_train=0.8, verbose=False,
                                   sparsity_c=0.1, bool_train_decoder=True,
-                                  decoder_type='logistic_regression'):
+                                  decoder_type='logistic_regression', save_inplace=True):
     '''Generates new data, and then trains the decoder via train_decoder()'''
     if n_samples is None:
         n_samples = rnn.info_dict['n_total']
@@ -701,7 +707,7 @@ def train_single_decoder_new_data(rnn, ratio_expected=0.5, label='s1',
     ## Train decoder:
     score_mat, decoder_dict, forward_mat = train_decoder(rnn_model=rnn, x_train=x_train, x_test=x_test,
                                            labels_train=labels_train, labels_test=labels_test,
-                                           save_inplace=True, sparsity_c=sparsity_c, label_name=label,
+                                           save_inplace=save_inplace, sparsity_c=sparsity_c, label_name=label,
                                            bool_train_decoder=bool_train_decoder, decoder_type=decoder_type)
     forward_mat['labels_train'] = labels_train
     forward_mat['labels_test'] = labels_test
@@ -737,25 +743,8 @@ def save_pearson_corr(rnn, representation='s1', set_nans=True, save_inplace=Fals
     _, __, forw  = train_single_decoder_new_data(rnn=rnn, ratio_expected=0.5,
                                                  sparsity_c=0.1, bool_train_decoder=False)  # just gets data without training decoder
 
-    if representation == 'go':
-        labels_use_1 = np.array([x[1] != 'x' for x in forw['labels_train']])  # expected / match
-        labels_use_2 = np.array([x[1] == 'x' for x in forw['labels_train']])  # unexpected / non match
-    elif representation == 's1':
-        labels_use_1 = np.array([x[0] == '1' for x in forw['labels_train']])
-        labels_use_2 = np.array([x[0] == '2' for x in forw['labels_train']])
-    elif representation == 's2':
-        tmp_s2_labels = np.zeros(len(forw['labels_train']))
-        for i_lab, lab in enumerate(forw['labels_train']):
-            if lab[1] == 'x':
-                numeric_lab = ('1' if lab[0] == '2' else '2')  # opposite from first label
-                tmp_s2_labels[i_lab] = numeric_lab
-            else:
-                tmp_s2_labels[i_lab] = lab[1]
-        labels_use_1 = np.array([x == '1' for x in tmp_s2_labels])
-        labels_use_2 = np.array([x == '2' for x in tmp_s2_labels])
-
-    plot_diff = (forw['train'][labels_use_1, :, :].mean(0) - forw['train'][labels_use_2, :, :].mean(0))
-    corr_mat = np.corrcoef(plot_diff)
+    plot_diff, labels_use_1, labels_use_2 = ru.calculate_diff_activity(forw=forw, representation=representation)
+    corr_mat = np.corrcoef(plot_diff.T)
     assert corr_mat.shape[0] == corr_mat.shape[1] and corr_mat.shape[0] == 13
 
     if set_nans:
