@@ -289,7 +289,7 @@ def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=
 
 def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='7525',
                                        nature_stim_list=['onehot', 'periodic'], method='integral',
-                                       sparsity_str_list = ['0e+00', '1e-06', '5e-06', '1e-05', '5e-05', '1e-04', '5e-04', '1e-03', '5e-03', '1e-02', '1e-01']):
+                                       sparsity_str_list = ['0e+00', '1e-06', '5e-06', '1e-05', '5e-05', '1e-04', '5e-04', '1e-03', '5e-03', '1e-02', '5e-02', '1e-01']):
 
     n_sim = 20
     n_loss_functions_per_sim = 4

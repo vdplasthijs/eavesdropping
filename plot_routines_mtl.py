@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.patches as patches
+import matplotlib.lines
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from mpl_toolkits.axes_grid1.colorbar import colorbar as mpl_colorbar
 import seaborn as sns
@@ -452,7 +453,8 @@ def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_
                print(key, {x: (np.round(np.mean(learn_eff[x]), 4), np.round(np.std(learn_eff[x]), 4)) for x in list_keys})
 
 def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, indicate_sparsity=False,
-                             method='integral', nature_stim_list=['periodic', 'onehot'], ax=None):
+                             method='integral', nature_stim_list=['periodic', 'onehot'], ax=None,
+                             plot_custom_legend=False):
     df = ru.calculate_all_learning_eff_indices(method=method, task_list=task_list,
                                                 nature_stim_list=nature_stim_list)
     # assert len(task_list) == 2
@@ -460,6 +462,9 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
         fig, ax = plt.subplots(1, len(nature_stim_list), figsize=(6 * len(nature_stim_list), 3), gridspec_kw={'wspace': 0.7})
     if len(nature_stim_list) == 1:
         ax = [ax]
+
+    colour_dict = {'single': spec_only_colour,
+                  'multi': pred_spec_colour}
     i_plot = 0
     if plot_difference:
         tmp_df = df[[x[:4] != 'pred' for x in df['loss_comp']]].groupby(['task', 'nature_stim', 'setting','sparsity']).mean()  # compute mean for each set of conditions [ across simulations]
@@ -468,23 +473,20 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
         tmp_df = tmp_df.groupby(['task', 'nature_stim', 'sparsity']).sum()  # effectively comppute difference
         tmp_df.reset_index(inplace=True)  # bring multi indexes back to column values
         for i_nat, nat in enumerate(nature_stim_list):
-            g = sns.lineplot(data=tmp_df[tmp_df['nature_stim'] == nat], x='sparsity', y='learning_eff',
-                         style='task', ax=ax[i_plot], color='k', linewidth=4, markers=True)
+            sns.lineplot(data=tmp_df[tmp_df['nature_stim'] == nat], x='sparsity', y='learning_eff',
+                         style='task', ax=ax[i_plot], color='k', linewidth=4,
+                         markers=True,  err_kws={'alpha':0.1}, label='Difference')
             # ax[i_plot].plot([0, 0.2], [0, 0], c='grey')
-            # plt.setp(g.collections, sizes=[65])
-
             # ax[i_plot].set_ylabel(f'Eavesdropping effect\n(difference in {method})')
             i_plot += 1
     else:
         spec_task_df = df[[x.split('_')[0] in task_list for x in df['loss_comp']]]
         for i_nat, nat in enumerate(nature_stim_list):
-            g = sns.lineplot(data=spec_task_df[spec_task_df['nature_stim'] == nat], x='sparsity', y='learning_eff',
+            sns.lineplot(data=spec_task_df[spec_task_df['nature_stim'] == nat], x='sparsity', y='learning_eff',
                          hue='setting', style='task', markers=True, ci=95, linewidth=1.5,
-                         ax=ax[i_plot], hue_order=['multi', 'single'])
+                         ax=ax[i_plot], hue_order=['multi', 'single'], palette=colour_dict,
+                         err_kws={'alpha':0.1}, **{'alpha': 0.5})
             # ax[i_plot].set_ylim([0, 1.1])
-            plt.setp(g.collections, alpha=0.1)
-            plt.setp(g.lines, alpha=0.6)
-
             # ax[i_plot].set_ylabel('Learning efficiency index\n(= integral loss function)')
             i_plot += 1
     for i_plot in range(len(ax)):
@@ -513,6 +515,14 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
             ax[i_plot].set_ylabel('Speed of convergence of\ncategorisation task')
         elif method == 'final_loss':
             ax[i_plot].set_ylabel('Final loss of\ncategorisation task')
+
+        if plot_custom_legend:
+            custom_lines = [matplotlib.lines.Line2D([0], [0], color=colour_dict['single'], lw=1.5),
+                            matplotlib.lines.Line2D([0], [0], color=colour_dict['multi'], lw=1.5),
+                            matplotlib.lines.Line2D([0], [0], color='k', lw=3)]
+            ax[i_plot].legend(custom_lines, ['single', 'dual', 'difference'], frameon=False,
+                              loc='upper left', bbox_to_anchor=(0, 1.35))
+
 
     return df
 
@@ -575,8 +585,11 @@ def plot_autotemp_s1_decoding(parent_folder='/home/thijs/repos/rotation/models/7
                                     reset_decoders=True, skip_if_already_decoded=True)  # check if decoding has been done before
     autotemp_dec_dict = {}
     n_tp = 13  # for t_stim = 2 and t_dleay = 2
-    colour_dict = {'pred_only': pred_only_colour, 'dmc_only': spec_only_colour,
+
+    colour_dict = {'dmc_only': spec_only_colour, 'pred_only': pred_only_colour,
                   'pred_dmc': pred_spec_colour}
+    label_dict = {'dmc_only': 'single cat', 'pred_only': 'single pred',
+                  'pred_dmc': 'dual task'}
     for cf in child_folders:
         rnn_folder = os.path.join(parent_folder, cf + '/')
         list_rnns = os.listdir(rnn_folder)
@@ -587,15 +600,15 @@ def plot_autotemp_s1_decoding(parent_folder='/home/thijs/repos/rotation/models/7
             autotemp_dec_dict[cf][i_rnn, :] = autotemp_score
         mean_dec = autotemp_dec_dict[cf].mean(0)
         std_dec = autotemp_dec_dict[cf].std(0)
-        ax.plot(mean_dec, linewidth=3, label=cf, c=colour_dict[cf])
+        ax.plot(mean_dec, linewidth=3, label=label_dict[cf], c=colour_dict[cf])
         ax.fill_between(x=np.arange(n_tp), y1=mean_dec - std_dec, y2=mean_dec + std_dec, alpha=0.3, facecolor=colour_dict[cf])
     if plot_legend:
-        ax.legend()
+        ax.legend(frameon=False)
     ax.set_xticks(np.arange(n_tp))
     ax.set_xticklabels(time_labels_blank[:-1])
     ax.set_ylim([0.45, 1.05])
     ax.set_xlabel('Time')
-    ax.set_ylabel('S1 decoding accuracy')
+    ax.set_ylabel('S1 decoding\naccuracy')
     ax.set_title('S1 memory')
     despine(ax)
 
@@ -621,8 +634,8 @@ def plot_autotemp_all_reps_decoding(rnn_folder='/home/thijs/repos/rotation/model
     colour_dict = {'s1': pred_spec_colour, 's2': pred_spec_colour,
                   'go': pred_spec_colour}
     linestyle_dict = {'s1': '-', 's2': '--', 'go': ':'}
-
-    for i_rep, rep in enumerate(['s1', 's2', 'go']):
+    label_dict = {'s1': 'S1', 's2': 'S2', 'go': 'M/NM'}
+    for i_rep, rep in enumerate(['go', 's1', 's2']):
         list_rnns = os.listdir(rnn_folder)
         autotemp_dec_dict[rep] = np.zeros((len(list_rnns), n_tp))
         for i_rnn, rnn_name in enumerate(list_rnns):
@@ -631,17 +644,17 @@ def plot_autotemp_all_reps_decoding(rnn_folder='/home/thijs/repos/rotation/model
             autotemp_dec_dict[rep][i_rnn, :] = autotemp_score
         mean_dec = autotemp_dec_dict[rep].mean(0)
         std_dec = autotemp_dec_dict[rep].std(0)
-        ax.plot(mean_dec, linewidth=3, label=rep, c=colour_dict[rep], linestyle=linestyle_dict[rep])
+        ax.plot(mean_dec, linewidth=3, label=label_dict[rep], c=colour_dict[rep], linestyle=linestyle_dict[rep])
         ax.fill_between(x=np.arange(n_tp), y1=mean_dec - std_dec, y2=mean_dec + std_dec,
                         alpha=0.3, facecolor=colour_dict[rep])
     if plot_legend:
-        ax.legend()
+        ax.legend(frameon=False, loc='upper left', bbox_to_anchor=(-0.015, 1.15))
     ax.set_xticks(np.arange(n_tp))
     ax.set_xticklabels(time_labels_blank[:-1])
     ax.set_ylim([0.45, 1.05])
     ax.set_xlabel('Time')
-    ax.set_ylabel('Decoding accuracy')
-    ax.set_title('Memory of S1, S2 and M/NM')
+    ax.set_ylabel('Decoding\naccuracy')
+    ax.set_title('Memory of S1, S2 and M/NM', fontdict={'weight': 'bold'})
     despine(ax)
 
 def plot_correlation_matrix(rnn, representation='s1', ax=None, hard_reset=False):
@@ -716,7 +729,7 @@ def plot_autotemp_s1_different_epochs(rnn_name='/home/thijs/repos/rotation/model
     ax.set_xticklabels(time_labels_blank[:-1])
     ax.set_xlabel('Time')
     ax.set_ylim([0.45, 1.05])
-    ax.set_ylabel('S1 decoding accuracy ')
+    ax.set_ylabel('S1 decoding\naccuracy ')
     despine(ax)
     if plot_legend:
         ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1), frameon=False)
