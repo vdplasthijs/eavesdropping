@@ -255,7 +255,7 @@ def plot_n_nodes_sweep(parent_folder='/home/thijs/repos/rotation/models/sweep_n_
             ax.set_ylabel('Speed of convergence\nof prediction task')
         elif method == 'final_loss':
             ax.set_ylabel('Final loss of\nprediction task')
-        ax.set_title('Optimal network size\nfor various sparsity values', fontdict={'weight': 'bold'})
+        ax.set_title('Optimal network size\nfor various sparsity values', loc='left', fontdict={'weight': 'bold'})
         ax = despine(ax)
 
 def plot_n_nodes_sweep_multiple(super_folder='/home/thijs/repos/rotation/models/sweep_n_nodes/7525/dmc_task/onehot',
@@ -314,7 +314,7 @@ def plot_late_s2_comparison(late_s2_folder='/home/thijs/repos/rotation/models/la
         ax.set_ylabel('Speed of convergence of\nprediction task')
     elif method == 'final_loss':
         ax.set_ylabel('Final loss of\nprediction task')
-    ax.set_title('Stimulus timing does not \ncause learning difference', fontdict={'weight': 'bold'})
+    ax.set_title('Stimulus timing does not \ncause learning difference', loc='left', fontdict={'weight': 'bold'})
     ax = despine(ax)
     ax.set_ylim()
 
@@ -354,10 +354,10 @@ def plot_stl_mtl_comparison(dmc_only_folder='/home/thijs/repos/rotation/models/7
     print(p_val, 'mtl stl')
     ax.set_xlabel('Learning tasks')
     if method == 'integral':
-        ax.set_ylabel('Speed of convergence of\ncategorisation task')
+        ax.set_ylabel('Speed of convergence of\nmatching task')
     elif method == 'final_loss':
-        ax.set_ylabel('Final loss of\ncategorisation task')
-    ax.set_title('Dual task networks eavesdrop\nto learn the categorisation task', fontdict={'weight': 'bold'})
+        ax.set_ylabel('Final loss of\nmatching task')
+    ax.set_title('Dual task networks eavesdrop\nto learn the matching task', loc='left', fontdict={'weight': 'bold'})
     ax = despine(ax)
 
 def plot_7525_5050_comparison(folder_50='/home/thijs/repos/rotation/models/5050/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
@@ -399,10 +399,10 @@ def plot_7525_5050_comparison(folder_50='/home/thijs/repos/rotation/models/5050/
     # ax.set_xlabel('Ratio ' + r"$\alpha$" + '/' + r"$\beta$")
     ax.set_xlabel(r'$P(\alpha = \beta)$')
     if method == 'integral':
-        ax.set_ylabel('Speed of convergence of\ncategorisation task')
+        ax.set_ylabel('Speed of convergence of\nmatching task')
     elif method == 'final_loss':
-        ax.set_ylabel('Final loss of\ncategorisation task')
-    ax.set_title('Correlated stimuli are required\nfor eavesdropping', fontdict={'weight': 'bold'})
+        ax.set_ylabel('Final loss of\nmatching task')
+    ax.set_title('Correlated stimuli are required\nfor eavesdropping', loc='left', fontdict={'weight': 'bold'})
     ax = despine(ax)
 
 def plot_example_trial(trial, ax=None, yticklabels=output_vector_labels,
@@ -425,7 +425,8 @@ def plot_example_trial(trial, ax=None, yticklabels=output_vector_labels,
 
 def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_stim='onehot',
                                        sparsity_str='1e-03', ax=None, plot_legend=True, verbose=0,
-                                       plot_std=True, plot_indiv=False, plot_pred=True, plot_spec=True):
+                                       plot_std=True, plot_indiv=False, plot_pred=True, plot_spec=True,
+                                       plot_title=True):
    base_folder = f'models/{ratio_exp_str}/{task}_task/{nature_stim}/sparsity_{sparsity_str}/'
    # print('USING SAVED STATE')
    folders_dict = {}
@@ -439,7 +440,8 @@ def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_
                           plot_std=plot_std, plot_indiv=plot_indiv,
                           task_type=task, ax=ax, plot_legend=plot_legend,
                           plot_pred=plot_pred, plot_spec=plot_spec)
-   plt.title(task + r'$\; P(\alpha = \beta) = $' + f'0.{ratio_exp_str[:2]},' + r'$ \; \; \lambda=$' + f'{sparsity_str}');
+   if plot_title:
+       plt.title(task + r'$\; P(\alpha = \beta) = $' + f'0.{ratio_exp_str[:2]},' + r'$ \; \; \lambda=$' + f'{sparsity_str}');
 
    if verbose > 0:
 
@@ -454,7 +456,7 @@ def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_
 
 def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, indicate_sparsity=False,
                              method='integral', nature_stim_list=['periodic', 'onehot'], ax=None,
-                             plot_custom_legend=False):
+                             plot_custom_legend=False, plot_title=False, leg_anchor=(0, 1.05), leg_cols=2):
     df = ru.calculate_all_learning_eff_indices(method=method, task_list=task_list,
                                                 nature_stim_list=nature_stim_list)
     # assert len(task_list) == 2
@@ -474,7 +476,7 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
         tmp_df.reset_index(inplace=True)  # bring multi indexes back to column values
         for i_nat, nat in enumerate(nature_stim_list):
             sns.lineplot(data=tmp_df[tmp_df['nature_stim'] == nat], x='sparsity', y='learning_eff',
-                         style='task', ax=ax[i_plot], color='k', linewidth=4,
+                         style='task', ax=ax[i_plot], color='k', linewidth=3,
                          markers=True,  err_kws={'alpha':0.1}, label='Difference')
             # ax[i_plot].plot([0, 0.2], [0, 0], c='grey')
             # ax[i_plot].set_ylabel(f'Eavesdropping effect\n(difference in {method})')
@@ -494,9 +496,11 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
         ax[i_plot].set_xscale('symlog', linthreshx=2e-6)
         if len(nature_stim_list) > 1:
             ax[i_plot].legend(bbox_to_anchor=(1.4, 1), loc='upper right')
-            ax[i_plot].set_title(nature_stim_list[i_plot], fontdict={'weight': 'bold'})
+            if plot_title:
+                ax[i_plot].set_title(nature_stim_list[i_plot], loc='left', fontdict={'weight': 'bold'})
         else:
-            ax[i_plot].set_title('Eavesdropping is sparsity dependent', fontdict={'weight': 'bold'})
+            if plot_title:
+                ax[i_plot].set_title('Eavesdropping is sparsity dependent', loc='left', fontdict={'weight': 'bold'})
             ax[i_plot].get_legend().remove()
         ax[i_plot].set_xlabel('Sparsity regularisation')
         if method == 'final_loss':
@@ -512,16 +516,16 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
         despine(ax[i_plot])
 
         if method == 'integral':
-            ax[i_plot].set_ylabel('Speed of convergence of\ncategorisation task')
+            ax[i_plot].set_ylabel('Speed of convergence of\nmatching task')
         elif method == 'final_loss':
-            ax[i_plot].set_ylabel('Final loss of\ncategorisation task')
+            ax[i_plot].set_ylabel('Final loss of\nmatching task')
 
         if plot_custom_legend:
             custom_lines = [matplotlib.lines.Line2D([0], [0], color=colour_dict['single'], lw=1.5),
                             matplotlib.lines.Line2D([0], [0], color=colour_dict['multi'], lw=1.5),
                             matplotlib.lines.Line2D([0], [0], color='k', lw=3)]
             ax[i_plot].legend(custom_lines, ['single', 'dual', 'difference'], frameon=False,
-                              loc='upper left', bbox_to_anchor=(0, 1.35))
+                              loc='upper left', bbox_to_anchor=leg_anchor, ncol=leg_cols)
 
 
     return df
@@ -563,11 +567,11 @@ def plot_sa_convergence(sa_folder_list=['/home/thijs/repos/rotation/models/simul
         ax_ratio[i_col].text(s=letters[i_col], x=-40, y=1.2, fontdict={'weight': 'bold'})
         ax_ratio[i_col].set_ylabel(r'$P(\alpha = \beta)$');
         fig.align_ylabels(axs=[ax_ratio[i_col], ax_conv[i_col]])
-    ax_ratio[0].set_title('Simulated annealing of stimulus correlation ' + r'$P(\alpha = \beta)$' + '\nenables RNNs to learn the categorisation task with ' + r'$P(\alpha = \beta) = 0.5$',
-                            fontdict={'weight': 'bold'})
+    ax_ratio[0].set_title('Simulated annealing of stimulus correlation ' + r'$\mathbf{P(\alpha = \beta)}$' + '\nenables RNNs to learn the matching task with ' + r'$\mathbf{P(\alpha = \beta) = 0.5}$',
+                            fontdict={'weight': 'bold'}, loc='left')
     if len(sa_folder_list) == 2:
-        ax_ratio[1].set_title('Whereas tasks with a constant ' + r'$P(\alpha = \beta) = 0.5$' + ' do not learn\nto solve the task',
-                                fontdict={'weight': 'bold'})
+        ax_ratio[1].set_title('Whereas tasks with a constant ' + r'$\mathbf{P(\alpha = \beta) = 0.5}$' + ' do not learn\nto solve the task',
+                                fontdict={'weight': 'bold'}, loc='left')
     return fig
 
 def plot_autotemp_s1_decoding(parent_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/',
@@ -609,7 +613,7 @@ def plot_autotemp_s1_decoding(parent_folder='/home/thijs/repos/rotation/models/7
     ax.set_ylim([0.45, 1.05])
     ax.set_xlabel('Time')
     ax.set_ylabel('S1 decoding\naccuracy')
-    ax.set_title('S1 memory')
+    # ax.set_title('S1 memory')
     despine(ax)
 
 
@@ -654,10 +658,11 @@ def plot_autotemp_all_reps_decoding(rnn_folder='/home/thijs/repos/rotation/model
     ax.set_ylim([0.45, 1.05])
     ax.set_xlabel('Time')
     ax.set_ylabel('Decoding\naccuracy')
-    ax.set_title('Memory of S1, S2 and M/NM', fontdict={'weight': 'bold'})
+    ax.set_title('Memory of S1, S2 and M/NM\n', loc='left', fontdict={'weight': 'bold'})
     despine(ax)
 
-def plot_correlation_matrix(rnn, representation='s1', ax=None, hard_reset=False):
+def plot_correlation_matrix(rnn, representation='s1', ax=None, hard_reset=False,
+                            plot_mat=True, alpha=1):
     if ax is None:
         ax = plt.subplot(111)
 
@@ -666,15 +671,21 @@ def plot_correlation_matrix(rnn, representation='s1', ax=None, hard_reset=False)
     else:
         ru.ensure_corr_mat_exists(rnn=rnn, representation=representation)
 
-    sns.heatmap(copy.deepcopy(rnn.rep_corr_mat_dict[representation]), cmap='BrBG',
-                ax=ax, xticklabels=time_labels_blank[:-1], yticklabels=time_labels_blank[:-1],
-                cbar='BrBG', vmin=-1, vmax=1)
-    ax.set_yticklabels(rotation=90, labels=ax.get_yticklabels())
-    ax.set_ylabel('Time')
+    if plot_mat:
+        sns.heatmap(copy.deepcopy(rnn.rep_corr_mat_dict[representation]), cmap='BrBG',
+                    ax=ax, xticklabels=time_labels_blank[:-1], yticklabels=time_labels_blank[:-1],
+                    cbar='BrBG', vmin=-1, vmax=1)
+        ax.set_yticklabels(rotation=90, labels=ax.get_yticklabels())
+        ax.set_ylabel('Time')
+        ax.invert_yaxis()
+        bottom, top = ax.get_ylim()
+        ax.set_ylim(bottom - 0.5, top + 1.5)
+    else:
+        assert representation == 's1', 'other rep time indexing not implemented'
+        code = rnn.rep_corr_mat_dict[representation][np.array([2, 3]), :].mean(0)
+        ax.plot(code, linewidth=2, c='k', alpha=alpha)
+        ax.set_ylim([-1, 1])
     ax.set_xlabel('Time');
-    ax.invert_yaxis()
-    bottom, top = ax.get_ylim()
-    ax.set_ylim(bottom - 0.5, top + 1.5)
 
 def plot_decoding_matrix(rnn, representation='s1', ax=None):
     if ax is None:
@@ -710,19 +721,29 @@ def plot_hist_rot_indices(rnn_folder, representation='s1', ax=None):
             print(rot_ind_arr[i_rnn], np.mean(rnn.test_loss_split['dmc'][-10:]))
     ax.hist(rot_ind_arr, bins=np.linspace(-1, 1, 21), histtype='step', linewidth=3)
 
-def plot_autotemp_s1_different_epochs(rnn_name='/home/thijs/repos/rotation/models/save_state/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/rnn-mnm_2021-05-13-2134.data',
+def plot_autotemp_s1_different_epochs(rnn_folder='/home/thijs/repos/rotation/models/save_state/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
+                                      # rnn_name='rnn-mnm_2021-05-13-2134.data',
                                       epoch_list=[1, 2, 4, 6, 8, 10, 12, 15, 18, 20, 25, 40],
-                                      ax=None, autotemp_dec_dict=None, plot_legend=True):
+                                      ax=None, plot_legend=True, autotemp_dec_mat_dict=None):
     if ax is None:
         ax = plt.subplot(111)
     n_tp = 13
-    rnn = ru.load_rnn(rnn_name)
-    autotemp_dec_dict = ru.calculate_autotemp_different_epochs(rnn=rnn, epoch_list=epoch_list,
-                                                              autotemp_dec_dict=autotemp_dec_dict)
 
-    alpha_list = [0.88 ** ii for ii in range(len(epoch_list))]
+    rnn_list = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
+    n_rnns = len(rnn_list)
+    if autotemp_dec_mat_dict is None:
+        autotemp_dec_mat_dict = {x: np.zeros((n_rnns, n_tp)) for x in epoch_list}
+        for i_rnn, rnn_name in enumerate(rnn_list):
+            print(f'RNN {i_rnn + 1}/{len(rnn_list)}')
+            rnn = ru.load_rnn(os.path.join(rnn_folder, rnn_name))
+            tmp_autotemp_dec_dict = ru.calculate_autotemp_different_epochs(rnn=rnn, epoch_list=epoch_list,
+                                                                      autotemp_dec_dict=None)
+            for k, v in tmp_autotemp_dec_dict.items():
+                autotemp_dec_mat_dict[k][i_rnn, :] = tmp_autotemp_dec_dict[k]
+
+    alpha_list = [0.86 ** ii for ii in range(len(epoch_list))]
     for i_epoch, epoch in tqdm(enumerate(epoch_list)):
-        ax.plot(autotemp_dec_dict[epoch], linewidth=3, color=pred_spec_colour, #'#000087',
+        ax.plot(autotemp_dec_mat_dict[epoch].mean(0), linewidth=3, color=pred_spec_colour, #'#000087',
                 alpha=alpha_list[::-1][i_epoch], label=f'epoch {epoch}')
 
     ax.set_xticks(np.arange(n_tp))
@@ -733,9 +754,9 @@ def plot_autotemp_s1_different_epochs(rnn_name='/home/thijs/repos/rotation/model
     despine(ax)
     if plot_legend:
         ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1), frameon=False)
-    ax.set_title('S1 memory over epochs')
+    # ax.set_title('S1 memory over epochs')
 
-    return autotemp_dec_dict
+    return autotemp_dec_mat_dict
 
 
 def plot_raster_trial_average(plot_diff, ax=None, reverse_order=False,
@@ -767,7 +788,7 @@ def plot_raster_trial_average(plot_diff, ax=None, reverse_order=False,
     ax.set_xticklabels(rotation=0, labels=ax.get_xticklabels())
     bottom, top = ax.get_ylim()
     ax.set_ylim(bottom - 0.5, top + 1.5)
-    ax.set_title(f'Activity difference dependent on {representation}', weight='bold')
+    ax.set_title(f'Activity difference dependent on {representation}', loc='left', weight='bold')
     ax.set_xlabel('Time');
 
     return ol
