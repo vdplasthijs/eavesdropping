@@ -374,13 +374,12 @@ def count_datasets_sparsity_sweep(super_folder='/home/thijs/repos/rotation/model
             task_nat_spars_folder = os.path.join(task_nat_folder, sparsity_folder)
             if os.path.exists(task_nat_spars_folder):
                 tt_folders = os.listdir(task_nat_spars_folder)  # [pred_only, dmc_only etc]
-                # tt_folders = ['pred_only']
                 n_ds_arr = np.zeros(len(tt_folders))
                 for i_tt, tt_folder in enumerate(tt_folders):
                     n_ds_arr[i_tt] = len([x for x in os.listdir(os.path.join(task_nat_spars_folder, tt_folder)) if x[-5:] == '.data'])
                 if len(np.unique(n_ds_arr)) != 1:
                     print(f'{task_nat_spars_folder} does not have equal number of trainings: {np.unique(n_ds_arr)}')
-                n_ds_dict[task_nat][i_spars] = np.max(n_ds_arr)  #because they are all the same anyway
+                n_ds_dict[task_nat][i_spars] = np.mean(n_ds_arr)  #because they are all the same anyway
             else:
                 n_ds_dict[task_nat][i_spars] = 0
 
