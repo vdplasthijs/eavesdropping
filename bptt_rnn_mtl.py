@@ -30,11 +30,13 @@ print(device)
 def generate_synt_data_general(n_total=100, t_delay=2, t_stim=2,
                                ratio_train=0.8, ratio_exp=0.75,
                                noise_scale=0.05, late_s2=False,
+                               early_match=False,
                                nature_stim='onehot', task='dmc'):
     '''Generate synthetic data
 
     nature_stim: onehot, periodic, tuning
     task: dms, dmc, dmrs, dmrc, discr'''
+    assert (late_s2 and early_match) is False
     # assert late_s2 is False, 'Late s2 not implemented'
     assert ratio_train <= 1 and ratio_train >= 0
     pd = {}  #parameter dictionariy
@@ -63,7 +65,10 @@ def generate_synt_data_general(n_total=100, t_delay=2, t_stim=2,
     if late_s2 is False:
         for i_delay in range(4):  # 4 delay periods
             all_seq[:, :, 0][:, (i_delay * pd['period']):(i_delay * pd['period'] + t_delay)] = 1
-        all_seq[:, :, 5][:, (3 * t_delay + 2 * t_stim):(3 * t_delay + 3 * t_stim)] = 1  # Go cue
+        if early_match is False:
+            all_seq[:, :, 5][:, (3 * t_delay + 2 * t_stim):(3 * t_delay + 3 * t_stim)] = 1  # Go cue
+        elif early_match:
+            all_seq[:, :, 5][:, pd['slice_s2']] = 1  # Go cue
     elif late_s2:
         for i_delay in range(3):  # 3 delay periods
             all_seq[:, :, 0][:, (i_delay * pd['period']):(i_delay * pd['period'] + t_delay)] = 1
@@ -108,7 +113,10 @@ def generate_synt_data_general(n_total=100, t_delay=2, t_stim=2,
 
     assert y_test.shape[0] == len(labels_test)
     if late_s2 is False:
-        slice_go_output = slice((3 * pd['t_delay'] + 2 * pd['t_stim'] - 1), (3 * pd['t_delay'] + 3 * pd['t_stim'] - 1))  # -1 b/c output is one time step ahaead from input
+        if early_match is False:
+            slice_go_output = slice((3 * pd['t_delay'] + 2 * pd['t_stim'] - 1), (3 * pd['t_delay'] + 3 * pd['t_stim'] - 1))  # -1 b/c output is one time step ahaead from input
+        elif early_match:
+            slice_go_output = slice((2 * pd['t_delay'] + 1 * pd['t_stim'] - 1), (2 * pd['t_delay'] + 2 * pd['t_stim'] - 1))  # -1 b/c output is one time step ahaead from input
     elif late_s2 is True:
         slice_go_output = slice((3 * pd['t_delay'] + 3 * pd['t_stim'] - 1), (4 * pd['t_delay'] + 3 * pd['t_stim'] - 1))  # -1 b/c output is one time step ahaead from input
     if task == 'dms' or task == 'dmc' or task == 'dmrs' or task == 'dmrc':  # determine matches & non matches
@@ -413,6 +421,14 @@ def specialisation_loss(y_est, y_true, model, eval_times=np.array([9, 10]), late
     assert y_est.shape[1] == 13
     if late_s2:
         eval_times = np.array([11, 12])
+    if 'early_match' in model.info_dict.keys():
+        if model.info_dict['early_match'] is True:
+            early_match = True 
+    else:
+        early_match = False
+    if early_match:
+        # print('using ealry match in spec loss!')
+        eval_times = np.array([5, 6])
     y_est_trunc = y_est[:, eval_times, :][:, :, model.n_input:]  # only evaluated these time points, cut off at n_input, because spec task follows after
     y_true_trunc = y_true[:, eval_times, :][:, :, model.n_input:]
     assert y_true_trunc.sum(2).mean() == 1, f'mean: {y_true_trunc.sum(2).mean()}, eval: {eval_times}, neurons {model.n_input}, shape {y_true_trunc.shape}, late_s2: {late_s2}'  # sum should be 1 to use cross entropy
@@ -526,6 +542,7 @@ def bptt_training(rnn, optimiser, dict_training_params, d_dict=None,
             for epoch in tr:
                 if simulated_annealing:
                     ## create data for this epoch
+                    assert 'early_match' not in rnn.info_dict.keys()
                     tmp0, tmp1 = generate_synt_data_general(n_total=d_dict['n_total'], t_delay=d_dict['t_delay'], t_stim=d_dict['t_stim'],
                                                 ratio_train=d_dict['ratio_train'], ratio_exp=ratio_exp_array[epoch],  # with current exp ratio
                                                 noise_scale=d_dict['noise_scale'], late_s2=late_s2,
@@ -692,6 +709,10 @@ def train_single_decoder_new_data(rnn, ratio_expected=0.5, label='s1',
         n_samples = rnn.info_dict['n_total']
 
     ## Generate data:
+    if 'early_match' in rnn.info_dict.keys():
+        early_match = rnn.info_dict['early_match']
+    else:
+        early_match = False
     tmp0, tmp1 = generate_synt_data_general(n_total=n_samples,
                                    t_delay=rnn.info_dict['t_delay'],
                                    t_stim=rnn.info_dict['t_stim'],
@@ -699,7 +720,7 @@ def train_single_decoder_new_data(rnn, ratio_expected=0.5, label='s1',
                                    ratio_exp=ratio_expected,
                                    noise_scale=rnn.info_dict['noise_scale'],
                                    late_s2=rnn.info_dict['late_s2'],  nature_stim=rnn.info_dict['nature_stim'],
-                                   task=rnn.info_dict['type_task'])
+                                   task=rnn.info_dict['type_task'], early_match=early_match)
     x_train, y_train, x_test, y_test = tmp0
     labels_train, labels_test = tmp1
     if verbose > 0:
@@ -781,10 +802,14 @@ def execute_rnn_training(nn, n_simulations, t_dict, d_dict, nature_stim='',
 
     if simulated_annealing is False:
         ## Generate data:
+        if 'early_match' in t_dict.keys():
+            early_match = t_dict['early_match']
+        else:
+            early_match = False
         tmp0, tmp1 = generate_synt_data_general(n_total=d_dict['n_total'], t_delay=d_dict['t_delay'], t_stim=d_dict['t_stim'],
                                     ratio_train=d_dict['ratio_train'], ratio_exp=d_dict['ratio_exp'],
                                     noise_scale=d_dict['noise_scale'], late_s2=late_s2,
-                                    nature_stim=nature_stim, task=type_task)
+                                    nature_stim=nature_stim, task=type_task, early_match=early_match)
 
         x_train, y_train, x_test, y_test = tmp0
         labels_train, labels_test = tmp1
@@ -816,6 +841,9 @@ def execute_rnn_training(nn, n_simulations, t_dict, d_dict, nature_stim='',
     rnn.info_dict['simulated_annealing'] = simulated_annealing
 
     ## Train with BPTT
+    if 'early_match' in rnn.info_dict:
+        if rnn.info_dict['early_match'] is True:
+            print('Starting training with early match')
     rnn = bptt_training(rnn=rnn, optimiser=opt, dict_training_params=t_dict, d_dict=d_dict,
                         x_train=x_train, x_test=x_test, y_train=y_train, y_test=y_test,
                         verbose=0, late_s2=late_s2, use_gpu=use_gpu,
@@ -871,9 +899,11 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                  train_task_list=['pred_only', 'spec_only', 'pred_spec'],
                  sparsity_list=[1e-3], n_sim=10, use_gpu=False, sweep_n_nodes=False,
                  late_s2=False, ratio_exp=0.75, simulated_annealing=False,
-                 save_state=False):
+                 save_state=False, early_match=False):
     assert (late_s2 and simulated_annealing) is False
     assert (sweep_n_nodes and simulated_annealing) is False
+    assert (early_match and simulated_annealing) is False
+    assert (early_match and late_s2) is False
     if use_gpu:
         torch.set_default_tensor_type(torch.cuda.FloatTensor)
     if sweep_n_nodes:
@@ -897,6 +927,8 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
         t_dict['n_epochs'] = 80  # training epochs
     t_dict['check_conv'] = False  # check for convergence (and abort if converged)
     t_dict['conv_rel_tol'] = 5e-4  # assess convergence by relative difference between two epochs is smaller than this
+    if early_match:
+        t_dict['early_match'] = True
 
     exp_perc = int(d_dict['ratio_exp'] * 100)
     exp_str = f'{exp_perc}{100 - exp_perc}'
@@ -934,6 +966,8 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                             parent_folder = f'{mod_f}/late_s2/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
                         elif simulated_annealing:
                             parent_folder = f'{mod_f}/simulated_annealing/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
+                        elif early_match:
+                            parent_folder = f'{mod_f}/early_match/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
                         else:
                             parent_folder = f'{mod_f}/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
                         if not os.path.exists(parent_folder):
