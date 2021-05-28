@@ -496,3 +496,37 @@ def calculate_diff_activity(forw, representation='s1'):
 
     plot_diff = (forw['train'][labels_use_1, :, :].mean(0) - forw['train'][labels_use_2, :, :].mean(0))
     return plot_diff.T, labels_use_1, labels_use_2
+
+
+def inspect_sparsity_effect_weights(super_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot',
+                                    th_nz=0.1):
+    spars_folders = os.listdir(super_folder)
+    # print(spars_folders)
+    # return
+    task_type = 'pred_dmc'
+    metric_list = ['L1', 'L2', 'number_nonzero']
+    layer_names = ['lin_input', 'lin_feedback', 'lin_output']
+    dict_layers = {x: {y: {} for y in spars_folders} for x in layer_names}
+    for i_spars, spars_f in enumerate(spars_folders):
+        rnn_folder = os.path.join(super_folder, spars_f, task_type)
+        rnn_list = get_list_rnns(rnn_folder=rnn_folder)
+        # print(rnn_list)
+        n_rnns = len(rnn_list)
+        for name_layer in layer_names:
+            dict_layers[name_layer][spars_f] = {x: np.zeros(n_rnns) for x in metric_list}
+        ## Load RNN
+        for i_rnn, rnn_name in enumerate(rnn_list):
+            # if i_rnn == 4:
+            #     break
+            rnn = load_rnn(rnn_name=os.path.join(rnn_folder, rnn_name))
+            for name_layer in layer_names:
+                weights_tensor = rnn.state_dict()[f'{name_layer}.weight']
+                dict_layers[name_layer][spars_f]['L1'][i_rnn] = weights_tensor.norm(p=1)
+                dict_layers[name_layer][spars_f]['L2'][i_rnn] = weights_tensor.norm(p=2)
+                dict_layers[name_layer][spars_f]['number_nonzero'][i_rnn] = (weights_tensor.abs() > th_nz).sum().float() / weights_tensor.numel()
+
+        ## Extract metrics from parameters of all layers
+
+        ## save for this sparsity value
+
+    return dict_layers

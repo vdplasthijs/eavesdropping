@@ -460,7 +460,8 @@ def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_
 
 def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, indicate_sparsity=False,
                              method='integral', nature_stim_list=['periodic', 'onehot'], ax=None,
-                             plot_custom_legend=False, plot_title=False, leg_anchor=(0, 1.05), leg_cols=2):
+                             plot_custom_legend=False, plot_title=False, leg_anchor=(0, 1.05), leg_cols=2,
+                             new_x_axis_df=None):
     df = ru.calculate_all_learning_eff_indices(method=method, task_list=task_list,
                                                 nature_stim_list=nature_stim_list)
     # assert len(task_list) == 2
@@ -478,8 +479,15 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
         tmp_df['learning_eff'][multi_rows] *= -1   # multiple effiency with -1 so the difference can be computed using condition-specific sum
         tmp_df = tmp_df.groupby(['task', 'nature_stim', 'sparsity']).sum()  # effectively comppute difference
         tmp_df.reset_index(inplace=True)  # bring multi indexes back to column values
+        print(tmp_df['learning_eff'].sum(), task_list, nature_stim_list)
+        if new_x_axis_df is not None:
+            assert len(new_x_axis_df) == len(tmp_df)
+            tmp_df = pd.merge(tmp_df, new_x_axis_df, on='sparsity')
+            xaxis_name = 'number_nonzero'
+        else:
+            xaxis_name = 'sparsity'
         for i_nat, nat in enumerate(nature_stim_list):
-            sns.lineplot(data=tmp_df[tmp_df['nature_stim'] == nat], x='sparsity', y='learning_eff',
+            sns.lineplot(data=tmp_df[tmp_df['nature_stim'] == nat], x=xaxis_name, y='learning_eff',
                          style='task', ax=ax[i_plot], color='k', linewidth=3,
                          markers=True,  err_kws={'alpha':0.1}, label='Difference')
             # ax[i_plot].plot([0, 0.2], [0, 0], c='grey')
@@ -487,8 +495,14 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
             i_plot += 1
     else:
         spec_task_df = df[[x.split('_')[0] in task_list for x in df['loss_comp']]]
+        if new_x_axis_df is not None:
+            # assert len(new_x_axis_df) == len(tmp_df)
+            spec_task_df = pd.merge(spec_task_df, new_x_axis_df, on='sparsity')
+            xaxis_name = 'number_nonzero'
+        else:
+            xaxis_name = 'sparsity'
         for i_nat, nat in enumerate(nature_stim_list):
-            sns.lineplot(data=spec_task_df[spec_task_df['nature_stim'] == nat], x='sparsity', y='learning_eff',
+            sns.lineplot(data=spec_task_df[spec_task_df['nature_stim'] == nat], x=xaxis_name, y='learning_eff',
                          hue='setting', style='task', markers=True, ci=95, linewidth=1.5,
                          ax=ax[i_plot], hue_order=['multi', 'single'], palette=colour_dict,
                          err_kws={'alpha':0.1}, **{'alpha': 0.5})
@@ -496,22 +510,26 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
             # ax[i_plot].set_ylabel('Learning efficiency index\n(= integral loss function)')
             i_plot += 1
     for i_plot in range(len(ax)):
-        # ax[i_plot].set_xscale('log', nonposx='clip')
-        ax[i_plot].set_xscale('symlog', linthreshx=2e-6)
         if len(nature_stim_list) > 1:
             ax[i_plot].legend(bbox_to_anchor=(1.4, 1), loc='upper right')
             if plot_title:
                 ax[i_plot].set_title(nature_stim_list[i_plot], loc='left', fontdict={'weight': 'bold'})
         else:
             if plot_title:
-                ax[i_plot].set_title('Eavesdropping is sparsity dependent\n', loc='left', fontdict={'weight': 'bold'})
+                ax[i_plot].set_title('Sparsity-dependent eavesdropping\n', loc='left', fontdict={'weight': 'bold'})
             ax[i_plot].get_legend().remove()
-        ax[i_plot].set_xlabel('Sparsity regularisation')
+        if new_x_axis_df is None:
+            ax[i_plot].set_xlabel('Sparsity regularisation')
+            # ax[i_plot].set_xscale('log', nonposx='clip')
+            ax[i_plot].set_xscale('symlog', linthreshx=2e-6)
+        else:
+            ax[i_plot].set_xlabel('Fraction of nonzero connections')
+
         if method == 'final_loss':
             ax[i_plot].set_ylim([-0.02, 1.2])
         elif method == 'integral':
             ax[i_plot].set_ylim([-0.02, 1.5])
-        if indicate_sparsity:
+        if indicate_sparsity and new_x_axis_df is None:
 
             ax[i_plot].arrow(0.015, -0.32, 0.05,0, head_width=0.07, head_length=0.02, linewidth=1,
                       color='k', length_includes_head=True, clip_on=False)
@@ -534,6 +552,59 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
 
     return df
 
+def plot_bar_plot_all_tasks(ax=None, method='final_loss', save_fig=False):
+
+# task_list=['dms', 'dmc'], plot_difference=False, indicate_sparsity=False,
+#                              method='integral', nature_stim_list=['periodic', 'onehot'], ax=None,
+    if ax is None:
+        ax = plt.subplot(111)
+    task_nat_comb = (['dmc', 'onehot'], ['dmc', 'periodic'], ['dmrc', 'periodic'],
+                     ['dms', 'onehot'], ['dms', 'periodic'], ['dmrs', 'periodic'])
+    cum_eavesdropping_effect = {}
+
+    bar_width = 0.4
+    bar_locs = np.arange(3)
+    color_same = '#195190FF'
+    color_different = '#A2A2A1FF'
+    same_arr, diff_arr = np.zeros(3), np.zeros(3)
+    i_same, i_diff = 0, 0
+    for i_cond, cond in enumerate(task_nat_comb):
+        task = cond[0]
+        nat = cond[1]
+        key = task + '_' + nat
+        df = ru.calculate_all_learning_eff_indices(method=method, task_list=[task],
+                                                    nature_stim_list=[nat])
+
+        tmp_df = df[[x[:4] != 'pred' for x in df['loss_comp']]].groupby(['task', 'nature_stim', 'setting','sparsity']).mean()  # compute mean for each set of conditions [ across simulations]
+        multi_rows = [True if x[2] == 'multi' else False for x in tmp_df.index]  # select multitask settings
+        tmp_df['learning_eff'][multi_rows] *= -1   # multiple effiency with -1 so the difference can be computed using condition-specific sum
+        tmp_df = tmp_df.groupby(['task', 'nature_stim', 'sparsity']).sum()  # effectively comppute difference
+        tmp_df.reset_index(inplace=True)  # bring multi indexes back to column values
+        # print(tmp_df['learning_eff'].sum(), task_list, nature_stim_list)
+
+        cum_eavesdropping_effect[key] = tmp_df['learning_eff'].sum()
+
+        if task in ['dmc', 'dmrc']:  # same
+            same_arr[i_same] = cum_eavesdropping_effect[key]
+            i_same += 1
+        else:
+            diff_arr[i_diff] = cum_eavesdropping_effect[key]
+            i_diff += 1
+
+    ax.bar(bar_locs - bar_width / 2, same_arr, width=bar_width,
+           label='Same input domain', color=color_same)
+    ax.bar(bar_locs + bar_width / 2, diff_arr, width=bar_width,
+           label='Different input domain', color=color_different)
+    ax.set_xlabel('Task complexity ' + r'$\to$', fontdict={'weight': 'bold'})
+    ax.set_ylabel('Cumulative\neavesdropping effect')
+    ax.set_xticks(bar_locs)
+    ax.set_xticklabels(['2 samples\nMatch task', '4 samples\nMatch task', '4 samples\nRotated match task'])
+    ax.legend(frameon=False, loc='upper right')
+    ax.set_title('Eavesdropping effect decreases with\nincreasing match task complexity',
+                 fontdict={'weight': 'bold'}, loc='left')
+    despine(ax)
+    if save_fig:
+        plt.savefig('figures/nips/fig3_other-tasks_v2.pdf', bbox_inches='tight')
 def plot_sa_convergence(sa_folder_list=['/home/thijs/repos/rotation/models/simulated_annealing/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc'],
                         figsize=None, plot_std=True, plot_indiv=False):
     if figsize is None:
@@ -768,7 +839,7 @@ def plot_hist_rot_indices(rnn_folder, representation='s1', ax=None, verbose=0):
     ax.set_ylabel('Frequency')
     despine(ax)
     return rot_ind_arr
-    
+
 def plot_autotemp_s1_different_epochs(rnn_folder='/home/thijs/repos/rotation/models/save_state/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
                                       # rnn_name='rnn-mnm_2021-05-13-2134.data',
                                       add_labels=False,
