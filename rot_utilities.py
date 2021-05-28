@@ -186,7 +186,7 @@ def load_rnn(rnn_name):
     return rnn
 
 def make_df_network_size(rnn_folder):
-    rnn_names = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
+    rnn_names = get_list_rnns(rnn_folder=rnn_folder)
     df_data = pd.DataFrame({x: np.zeros(len(rnn_names)) for x in ['n_nodes', 'min_test_perf']})
     for i_rnn, rnn_name in enumerate(rnn_names):
         rnn = load_rnn(rnn_name=os.path.join(rnn_folder, rnn_name))
@@ -239,12 +239,80 @@ def rotation_index(mat, times_early=[4], times_late=[6]):
     rot = np.mean(elements_cross) / np.mean(elements_early)
     return rot
 
+def timestamp_max_date(rnn_name, date_max='2021-05-17', verbose=0):
+    if rnn_name[-5:] == '.data':
+        rnn_name = rnn_name[:-5]
+    date = rnn_name[8:18]
+    year = int(date[:4])
+    year_max = int(date_max[:4])
+    if year > year_max:
+        if verbose:
+            print(f'year {year}')
+        return False
+    elif year < year_max:
+        return True
+    else:
+        month = int(date[5:7])
+        month_max = int(date_max[5:7])
+        if month > month_max:
+            if verbose:
+                print(f'month {month}')
+            return False
+        elif month < month_max:
+            return True
+        else:
+            day = int(date[-2:])
+            day_max = int(date_max[-2:])
+            if day > day_max:
+                if verbose:
+                    print(f'day {day}')
+                return False
+            else:
+                return True
+
+def timestamp_min_date(rnn_name, date_min='2021-05-17', verbose=0):
+    if rnn_name[-5:] == '.data':
+        rnn_name = rnn_name[:-5]
+    date = rnn_name[8:18]
+    year = int(date[:4])
+    year_min = int(date_min[:4])
+    if year < year_min:
+        if verbose:
+            print(f'year {year}')
+        return False
+    elif year > year_min:
+        return True
+    else:
+        month = int(date[5:7])
+        month_min = int(date_min[5:7])
+        if month < month_min:
+            if verbose:
+                print(f'month {month}')
+            return False
+        elif month > month_min:
+            return True
+        else:
+            day = int(date[-2:])
+            day_min = int(date_min[-2:])
+            if day < day_min:
+                if verbose:
+                    print(f'day {day}')
+                return False
+            else:
+                return True
+
+def get_list_rnns(rnn_folder=''):
+    list_rnns = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data' and timestamp_max_date(rnn_name=x, date_max='2021-05-17')]
+    return list_rnns
+
 def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=False,
-                           method='integral'):
-    list_rnns = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
-    if len(list_rnns) > 20:
-        list_rnns = list_rnns[:20]
-        print(f'list rnns shortened for {rnn_folder}')
+                           method='integral', verbose=0):
+    list_rnns = get_list_rnns(rnn_folder=rnn_folder)
+    if verbose > 0:
+        print(rnn_folder, len(list_rnns))
+    # if len(list_rnns) > 20:
+    #     list_rnns = list_rnns[:20]
+    #     print(f'list rnns shortened for {rnn_folder}')
     n_rnn = len(list_rnns)
     for i_rnn, rnn_name in enumerate(list_rnns):
         rnn = load_rnn(os.path.join(rnn_folder, rnn_name))
@@ -259,6 +327,7 @@ def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=
             conv_dict[key][i_rnn, :] = arr.copy()
     learn_eff = {}
     for key in list_loss:
+        # print(list_loss, list_rnns)
         mat = conv_dict[key]
         if normalise_start:
             assert False, 'normalise start not implemented'
@@ -308,7 +377,7 @@ def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='
                     # print(base_folder, 'does not exist', nature_stim)
                     continue
                 folders_dict = {}
-                folders_dict['pred_only'] = base_folder + 'pred_only/'
+                # folders_dict['pred_only'] = base_folder + 'pred_only/'
                 folders_dict[f'{task}_only'] = base_folder + f'{task}_only/'
                 folders_dict[f'pred_{task}'] = base_folder + f'pred_{task}/'
                 for key, folder_rnns in folders_dict.items():
@@ -376,7 +445,7 @@ def count_datasets_sparsity_sweep(super_folder='/home/thijs/repos/rotation/model
                 tt_folders = os.listdir(task_nat_spars_folder)  # [pred_only, dmc_only etc]
                 n_ds_arr = np.zeros(len(tt_folders))
                 for i_tt, tt_folder in enumerate(tt_folders):
-                    n_ds_arr[i_tt] = len([x for x in os.listdir(os.path.join(task_nat_spars_folder, tt_folder)) if x[-5:] == '.data'])
+                    n_ds_arr[i_tt] = len(get_list_rnns(rnn_folder=os.path.join(task_nat_spars_folder, tt_folder)))
                 if len(np.unique(n_ds_arr)) != 1:
                     print(f'{task_nat_spars_folder} does not have equal number of trainings: {np.unique(n_ds_arr)}')
                 n_ds_dict[task_nat][i_spars] = np.mean(n_ds_arr)  #because they are all the same anyway

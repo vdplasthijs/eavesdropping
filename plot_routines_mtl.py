@@ -81,8 +81,11 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
     if rnn_folder is None:
         list_rnns = [rnn_name]
     else:
-        list_rnns = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
-
+        if 'early_match' in rnn_folder:
+            print('EARLY MATCH CORRECTED LIST DIR')
+            list_rnns = os.listdir(rnn_folder)
+        else:
+            list_rnns = ru.get_list_rnns(rnn_folder=rnn_folder)
 
     # print(label_dict_keys)
     n_rnn = len(list_rnns)
@@ -158,7 +161,7 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
     return (ax_top, ax_bottom)
 
 def len_data_files(dir_path):
-    return len([x for x in os.listdir(dir_path) if x[-5:] == '.data'])
+    return len(ru.get_list_rnns(rnn_folder=dir_path))
 
 def plot_split_perf_custom(folder_pred=None, folder_dmcpred=None, folder_dmc=None, ax=None,
                            plot_legend=True, legend_anchor=(1, 1), task_type='dmc',
@@ -352,7 +355,7 @@ def plot_stl_mtl_comparison(dmc_only_folder='/home/thijs/repos/rotation/models/7
     # ax.set_ylim(ylim)
     ax.set_ylim([-0.05, 1.6])
     print(p_val, 'mtl stl')
-    ax.set_xlabel('Learning tasks')
+    ax.set_xlabel('Learning paradigms')
     if method == 'integral':
         ax.set_ylabel('Speed of convergence of\nmatching task')
     elif method == 'final_loss':
@@ -402,7 +405,7 @@ def plot_7525_5050_comparison(folder_50='/home/thijs/repos/rotation/models/5050/
         ax.set_ylabel('Speed of convergence of\nmatching task')
     elif method == 'final_loss':
         ax.set_ylabel('Final loss of\nmatching task')
-    ax.set_title('Correlated stimuli are required\nfor eavesdropping', loc='left', fontdict={'weight': 'bold'})
+    ax.set_title('Stimulus predictability is\nrequired for eavesdropping', loc='left', fontdict={'weight': 'bold'})
     ax = despine(ax)
 
 def plot_example_trial(trial, ax=None, yticklabels=output_vector_labels,
@@ -413,6 +416,7 @@ def plot_example_trial(trial, ax=None, yticklabels=output_vector_labels,
         ax = plt.subplot(111)
 
     sns.heatmap(trial.T, yticklabels=yticklabels, cmap=c_map, cbar=c_bar,
+    rasterized=True, linewidths=0,
             xticklabels=xticklabels, ax=ax, vmin=vmin, vmax=vmax, )
     bottom, top = ax.get_ylim()
     ax.set_ylim(bottom + 0.5, top - 0.5)
@@ -500,7 +504,7 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
                 ax[i_plot].set_title(nature_stim_list[i_plot], loc='left', fontdict={'weight': 'bold'})
         else:
             if plot_title:
-                ax[i_plot].set_title('Eavesdropping is sparsity dependent', loc='left', fontdict={'weight': 'bold'})
+                ax[i_plot].set_title('Eavesdropping is sparsity dependent\n', loc='left', fontdict={'weight': 'bold'})
             ax[i_plot].get_legend().remove()
         ax[i_plot].set_xlabel('Sparsity regularisation')
         if method == 'final_loss':
@@ -533,7 +537,7 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
 def plot_sa_convergence(sa_folder_list=['/home/thijs/repos/rotation/models/simulated_annealing/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc'],
                         figsize=None, plot_std=True, plot_indiv=False):
     if figsize is None:
-        figsize = (6 * len(sa_folder_list), 3)
+        figsize = (5 * len(sa_folder_list), 3)
     fig = plt.figure(constrained_layout=False, figsize=figsize)
     gs_conv = fig.add_gridspec(ncols=len(sa_folder_list), nrows=1, bottom=0, top=0.75, left=0, right=1, wspace=0.3)
     gs_ratio = fig.add_gridspec(ncols=len(sa_folder_list), nrows=1, bottom=0.85, top=1, left=0, right=1, wspace=0.3)
@@ -544,8 +548,8 @@ def plot_sa_convergence(sa_folder_list=['/home/thijs/repos/rotation/models/simul
 
         ax_conv[i_col] = fig.add_subplot(gs_conv[i_col])
         ax_ratio[i_col] = fig.add_subplot(gs_ratio[i_col])
-
-        for i_rnn, rnn_name in enumerate(os.listdir(sa_folder)):
+        list_rnns = ru.get_list_rnns(rnn_folder=sa_folder)
+        for i_rnn, rnn_name in enumerate(list_rnns):
             rnn = ru.load_rnn(os.path.join(sa_folder, rnn_name))
             assert rnn.info_dict['simulated_annealing']
             if i_rnn == 0:
@@ -563,14 +567,15 @@ def plot_sa_convergence(sa_folder_list=['/home/thijs/repos/rotation/models/simul
         ax_ratio[i_col].plot(ratio_exp_array[i_col], linewidth=3, c='grey')
         ax_ratio[i_col].set_xticklabels([])
         ax_ratio[i_col].set_ylim([0.45, 0.85])
+        ax_conv[i_col].set_ylabel('Final loss')
         despine(ax_ratio[i_col])
         ax_ratio[i_col].text(s=letters[i_col], x=-40, y=1.2, fontdict={'weight': 'bold'})
         ax_ratio[i_col].set_ylabel(r'$P(\alpha = \beta)$');
         fig.align_ylabels(axs=[ax_ratio[i_col], ax_conv[i_col]])
-    ax_ratio[0].set_title('Simulated annealing of stimulus correlation ' + r'$\mathbf{P(\alpha = \beta)}$' + '\nenables RNNs to learn the matching task with ' + r'$\mathbf{P(\alpha = \beta) = 0.5}$',
+    ax_ratio[0].set_title('Simulated annealing of stimulus predictability\n' + r'$\mathbf{P(\alpha = \beta)}$' + ' enables RNNs to learn the matching task',# with ' + r'$\mathbf{P(\alpha = \beta) = 0.5}$',
                             fontdict={'weight': 'bold'}, loc='left')
     if len(sa_folder_list) == 2:
-        ax_ratio[1].set_title('Whereas tasks with a constant ' + r'$\mathbf{P(\alpha = \beta) = 0.5}$' + ' do not learn\nto solve the task',
+        ax_ratio[1].set_title('Whereas tasks with a constant ' + r'$\mathbf{P(\alpha = \beta) = 0.5}$' + ' do not\nlearn to solve the task',
                                 fontdict={'weight': 'bold'}, loc='left')
     return fig
 
@@ -596,7 +601,7 @@ def plot_autotemp_s1_decoding(parent_folder='/home/thijs/repos/rotation/models/7
                   'pred_dmc': 'dual task'}
     for cf in child_folders:
         rnn_folder = os.path.join(parent_folder, cf + '/')
-        list_rnns = os.listdir(rnn_folder)
+        list_rnns =  ru.get_list_rnns(rnn_folder=rnn_folder)
         autotemp_dec_dict[cf] = np.zeros((len(list_rnns), n_tp))
         for i_rnn, rnn_name in enumerate(list_rnns):
             rnn = ru.load_rnn(os.path.join(rnn_folder, rnn_name))
@@ -640,7 +645,7 @@ def plot_autotemp_all_reps_decoding(rnn_folder='/home/thijs/repos/rotation/model
     linestyle_dict = {'s1': '-', 's2': '--', 'go': ':'}
     label_dict = {'s1': 'S1', 's2': 'S2', 'go': 'M/NM'}
     for i_rep, rep in enumerate(['go', 's1', 's2']):
-        list_rnns = os.listdir(rnn_folder)
+        list_rnns =  ru.get_list_rnns(rnn_folder=rnn_folder)
         autotemp_dec_dict[rep] = np.zeros((len(list_rnns), n_tp))
         for i_rnn, rnn_name in enumerate(list_rnns):
             rnn = ru.load_rnn(os.path.join(rnn_folder, rnn_name))
@@ -652,7 +657,7 @@ def plot_autotemp_all_reps_decoding(rnn_folder='/home/thijs/repos/rotation/model
         ax.fill_between(x=np.arange(n_tp), y1=mean_dec - std_dec, y2=mean_dec + std_dec,
                         alpha=0.3, facecolor=colour_dict[rep])
     if plot_legend:
-        ax.legend(frameon=False, loc='upper left', bbox_to_anchor=(-0.015, 1.15))
+        ax.legend(frameon=False, loc='upper left', bbox_to_anchor=(-0.015, 1.2), ncol=2)
     ax.set_xticks(np.arange(n_tp))
     ax.set_xticklabels(time_labels_blank[:-1])
     ax.set_ylim([0.45, 1.05])
@@ -662,7 +667,7 @@ def plot_autotemp_all_reps_decoding(rnn_folder='/home/thijs/repos/rotation/model
     despine(ax)
 
 def plot_correlation_matrix(rnn, representation='s1', ax=None, hard_reset=False,
-                            plot_mat=True, alpha=1):
+                            plot_mat=True, alpha=1, plot_diag=True, plot_cbar=True):
     if ax is None:
         ax = plt.subplot(111)
 
@@ -671,22 +676,51 @@ def plot_correlation_matrix(rnn, representation='s1', ax=None, hard_reset=False,
     else:
         ru.ensure_corr_mat_exists(rnn=rnn, representation=representation)
 
+    n_tp = 13
     if plot_mat:
-        sns.heatmap(copy.deepcopy(rnn.rep_corr_mat_dict[representation]), cmap='BrBG',
-                    ax=ax, xticklabels=time_labels_blank[:-1], yticklabels=time_labels_blank[:-1],
-                    cbar='BrBG', vmin=-1, vmax=1)
-        ax.set_yticklabels(rotation=90, labels=ax.get_yticklabels())
+        full_mat = copy.deepcopy(rnn.rep_corr_mat_dict[representation])
+        plot_mat = full_mat[2:-4, :][:, 2:-4]
+        mask = np.zeros_like(plot_mat)
+        if plot_diag:
+            mask[np.tril_indices_from(plot_mat, k=-1)] = True
+        else:
+            mask[np.tril_indices_from(plot_mat, k=0)] = True
+
+        # sns.heatmap(full_mat, cmap='BrBG',
+        #             ax=ax, xticklabels=time_labels_blank[:-1], yticklabels=time_labels_blank[:-1],
+        #             cbar='BrBG', vmin=-1, vmax=1)
+
+        sns.heatmap(plot_mat, cmap='BrBG', mask=mask, rasterized=True, linewidths=0,
+                    ax=ax, xticklabels=time_labels_blank[2:-5], yticklabels=time_labels_blank[2:-5],
+                    cbar=plot_cbar, vmin=-1, vmax=1, square=True)
+        ax.set_yticklabels(rotation=0, labels=ax.get_yticklabels())
+        # ax.set_xticklabels(rotation=90, labels=ax.get_yticklabels())
         ax.set_ylabel('Time')
+        ax.set_xlabel('Time')
         ax.invert_yaxis()
         bottom, top = ax.get_ylim()
         ax.set_ylim(bottom - 0.5, top + 1.5)
     else:
         assert representation == 's1', 'other rep time indexing not implemented'
-        code = rnn.rep_corr_mat_dict[representation][np.array([2, 3]), :].mean(0)
-        ax.plot(code, linewidth=2, c='k', alpha=alpha)
-        ax.set_ylim([-1, 1])
-    ax.set_xlabel('Time');
 
+        if 's1' not in rnn.decoding_crosstemp_score.keys():  # if not pre-trained, do it now
+            score_mat, _, __ = bpm.train_single_decoder_new_data(rnn=rnn, save_inplace=True,
+                                                                label=representation)          ## calculate autotemp score
+        autotemp = rnn.decoding_crosstemp_score['s1'].diagonal()
+        code = rnn.rep_corr_mat_dict[representation][np.array([2, 3]), :].mean(0)
+        # print(autotemp, code, len(autotemp), len(code))
+        ax.plot([0, 13], [0, 0], ':', c='grey')
+        ax.plot([0, 13], [0.5, 0.5], ':', c='grey')
+        ax.plot([0, 13], [-0.5, -0.5], ':', c='grey')
+
+        for i_tp in range(n_tp - 1):
+            ax.plot([i_tp, i_tp + 1], code[i_tp:(i_tp + 2)], linewidth=2, c='k',
+                    alpha=np.clip((autotemp[i_tp] + autotemp[i_tp + 1]- 1) * 1, a_min=0, a_max=1))
+        ax.set_ylim([-1, 1])
+        ax.set_xlabel('Time');
+        ax.set_ylabel('Cross correlation')
+        ax.set_xticks(np.arange(n_tp))
+        ax.set_xticklabels(time_labels_blank[:-1])
 def plot_decoding_matrix(rnn, representation='s1', ax=None):
     if ax is None:
         ax = plt.subplot(111)
@@ -694,7 +728,7 @@ def plot_decoding_matrix(rnn, representation='s1', ax=None):
     score_mat, _, __ = bpm.train_single_decoder_new_data(rnn=rnn, save_inplace=False,
                                             label=representation)          ## calculate autotemp score
 
-    sns.heatmap(copy.deepcopy(score_mat), cmap='BrBG',
+    sns.heatmap(copy.deepcopy(score_mat), cmap='BrBG',rasterized=True, linewidths=0,
                 ax=ax, xticklabels=time_labels_blank[:-1], yticklabels=time_labels_blank[:-1],
                 cbar='BrBG', vmin=0, vmax=1)
     ax.set_yticklabels(rotation=90, labels=ax.get_yticklabels())
@@ -704,32 +738,47 @@ def plot_decoding_matrix(rnn, representation='s1', ax=None):
     bottom, top = ax.get_ylim()
     ax.set_ylim(bottom - 0.5, top + 1.5)
 
-def plot_hist_rot_indices(rnn_folder, representation='s1', ax=None):
+def plot_hist_rot_indices(rnn_folder, representation='s1', ax=None, verbose=0):
     if ax is None:
         ax = plt.subplot(111)
 
-    list_rnns = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
+    list_rnns = ru.get_list_rnns(rnn_folder=rnn_folder)
     rot_ind_arr = np.zeros(len(list_rnns))
-    for i_rnn, rnn_name in enumerate(list_rnns):
+    print(len(list_rnns))
+    for i_rnn, rnn_name in tqdm(enumerate(list_rnns)):
         rnn = ru.load_rnn(os.path.join(rnn_folder, rnn_name))
         ru.ensure_corr_mat_exists(rnn=rnn, representation=representation)
         corr_mat = rnn.rep_corr_mat_dict[representation]
         corr_s1s2_block = corr_mat[np.array([2, 3]), :][:, np.array([6, 7])]
         assert corr_s1s2_block.shape == (2, 2)
         rot_ind_arr[i_rnn] = np.mean(corr_s1s2_block)
-        if rnn.info_dict['task'] == 'pred_dmc':
+        if rnn.info_dict['task'] == 'pred_dmc' and verbose > 0:
             print(rot_ind_arr[i_rnn], np.mean(rnn.test_loss_split['dmc'][-10:]))
-    ax.hist(rot_ind_arr, bins=np.linspace(-1, 1, 21), histtype='step', linewidth=3)
+    n, bins, hist_patches = ax.hist(rot_ind_arr, bins=np.linspace(-1, 1, 11),
+                                    linewidth=1, color='k', rwidth=0.9, alpha=0.9)
+    ## Colour hist bars: https://stackoverflow.com/questions/23061657/plot-histogram-with-colors-taken-from-colormap
+    cm = plt.cm.get_cmap('BrBG')
+    bin_centers = 0.5 * (bins[:-1] + bins[1:])
+    col = bin_centers - np.min(bin_centers)      # scale values to interval [0,1]
+    col /= np.max(col)
+    for c, p in zip(col, hist_patches):
+        plt.setp(p, 'facecolor', cm(c))
 
+    ax.set_xlabel('S1 - S2 cross-correlation')
+    ax.set_ylabel('Frequency')
+    despine(ax)
+    return rot_ind_arr
+    
 def plot_autotemp_s1_different_epochs(rnn_folder='/home/thijs/repos/rotation/models/save_state/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
                                       # rnn_name='rnn-mnm_2021-05-13-2134.data',
+                                      add_labels=False,
                                       epoch_list=[1, 2, 4, 6, 8, 10, 12, 15, 18, 20, 25, 40],
                                       ax=None, plot_legend=True, autotemp_dec_mat_dict=None):
     if ax is None:
         ax = plt.subplot(111)
     n_tp = 13
 
-    rnn_list = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
+    rnn_list = ru.get_list_rnns(rnn_folder=rnn_folder)
     n_rnns = len(rnn_list)
     if autotemp_dec_mat_dict is None:
         autotemp_dec_mat_dict = {x: np.zeros((n_rnns, n_tp)) for x in epoch_list}
@@ -743,7 +792,7 @@ def plot_autotemp_s1_different_epochs(rnn_folder='/home/thijs/repos/rotation/mod
 
     alpha_list = [0.86 ** ii for ii in range(len(epoch_list))]
     for i_epoch, epoch in tqdm(enumerate(epoch_list)):
-        ax.plot(autotemp_dec_mat_dict[epoch].mean(0), linewidth=3, color=pred_spec_colour, #'#000087',
+        ax.plot(autotemp_dec_mat_dict[epoch].mean(0), linewidth=3, color=pred_spec_colour, # color=('red' if epoch == 21 else pred_spec_colour), #'#000087',
                 alpha=alpha_list[::-1][i_epoch], label=f'epoch {epoch}')
 
     ax.set_xticks(np.arange(n_tp))
@@ -752,6 +801,11 @@ def plot_autotemp_s1_different_epochs(rnn_folder='/home/thijs/repos/rotation/mod
     ax.set_ylim([0.45, 1.05])
     ax.set_ylabel('S1 decoding\naccuracy ')
     despine(ax)
+    if add_labels:
+        ax.text(s='1', x=5, y=0.54, c='k', fontdict={'weight': 'bold'})
+        ax.text(s='8', x=5.95, y=0.75, c='k', fontdict={'weight': 'bold'})
+        ax.text(s='18', x=7.5, y=0.76, c='k', fontdict={'weight': 'bold'})
+        ax.text(s='21', x=7.6, y=0.84, c='k', fontdict={'weight': 'bold'})
     if plot_legend:
         ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1), frameon=False)
     # ax.set_title('S1 memory over epochs')
@@ -760,7 +814,7 @@ def plot_autotemp_s1_different_epochs(rnn_folder='/home/thijs/repos/rotation/mod
 
 
 def plot_raster_trial_average(plot_diff, ax=None, reverse_order=False,
-                              c_bar=True, ol=None, th=None,
+                              c_bar=True, ol=None, th=None, plot_title=True,
                               index_label=0, representation='s1'):
     if representation == 'go':
         plot_cmap = 'RdGy'
@@ -781,14 +835,121 @@ def plot_raster_trial_average(plot_diff, ax=None, reverse_order=False,
         th = np.max(np.abs(plot_diff)) # threshold for visualisation
 
     sns.heatmap(plot_diff, cmap=plot_cmap, vmin=-1 * th, vmax=th, ax=ax,
+                    rasterized=True, linewidths=0,
                     xticklabels=time_labels_blank[:-1], cbar=c_bar)
     ax.set_yticklabels(rotation=0, labels=ax.get_yticklabels())
     ax.set_ylabel('neuron #')
     ax.invert_yaxis()
     ax.set_xticklabels(rotation=0, labels=ax.get_xticklabels())
     bottom, top = ax.get_ylim()
-    ax.set_ylim(bottom - 0.5, top + 1.5)
-    ax.set_title(f'Activity difference dependent on {representation}', loc='left', weight='bold')
+    # print(bottom, top)
+    # ax.set_ylim(bottom - 0.5, top + 3.5)
+    ax.set_ylim([0, plot_diff.shape[0]])
+    if plot_title:
+        ax.set_title(f'Activity difference dependent on {representation}', loc='left', weight='bold')
     ax.set_xlabel('Time');
 
     return ol
+
+
+def plot_weights(rnn_layer, ax=None, title='weights', xlabel='',
+                 ylabel='', xticklabels=None, yticklabels=None,
+                 weight_order=None, th=None):
+    '''Plot a weight matrix; given a RNN layer, with zero-symmetric clipping.'''
+    if ax is None:
+        ax = plt.subplot(111)
+    weights = [x for x in rnn_layer.parameters()][0].detach().numpy()
+    if weight_order is not None and weights.shape[0] == len(weight_order):
+        weights = weights[weight_order, :]
+    elif weight_order is not None and weights.shape[1] == len(weight_order):
+        weights = weights[:, weight_order]
+    else:
+        if weight_order is not None:
+            print(f'weight order not implemented because the size is different. weights: {weights.shape}, order: {weight_order.shape}')
+        else:
+            print('weight sorting not defined')
+    if th is None:
+        th = np.percentile(np.abs(weights), 95)
+    sns.heatmap(weights, ax=ax, cmap='PuOr', vmax=th, vmin=-1 * th)
+    bottom, top = ax.get_ylim()
+    ax.set_ylim(bottom + 0.5, top - 0.5)
+    ax.set_title(title, weight='bold');
+    ax.set_xlabel(xlabel); ax.set_ylabel(ylabel)
+    if xticklabels is not None:
+        ax.set_xticklabels(xticklabels)
+    if yticklabels is not None:
+        ax.set_yticklabels(yticklabels)
+    return ax
+
+def plot_all_UWVT(rnn_model, freq_labels='', weight_order=None, ax_w=None, th=None):
+    '''Plot the 3 weight matrices  U, W and V.'''
+    if ax_w is None:
+        fig, ax_w = plt.subplots(1, 3, figsize=(14, 3))
+    else:
+        if type(ax_w) is dict:
+            assert ax_w.keys() == [0, 1, 2]
+        elif type(ax_w) is np.ndarray:
+            assert len(ax_w) == 3
+        fig = None
+
+    plot_weights(ax=ax_w[0], rnn_layer=rnn_model.lin_input,
+                title='U - Input-neuron weights', th=th,
+                xticklabels=input_vector_labels, ylabel='Neuron',
+                weight_order=weight_order, xlabel='Input')
+
+
+    plot_weights(ax=ax_w[1], rnn_layer=rnn_model.lin_feedback,
+                 title='W - Feedback neuron-neuron weights',
+                 ylabel='Neuron', xlabel='Neuron', th=th,
+                 weight_order=weight_order)
+
+    plot_weights(ax=ax_w[2], rnn_layer=rnn_model.lin_output,
+                 title='V & T - Neuron-output weights', th=th,
+                 yticklabels=output_vector_labels, xlabel='Neuron',
+                 ylabel='Output', weight_order=weight_order)
+
+
+    return (fig, ax_w)
+
+def plot_example_codes(one_ax=True, specify_irnn_list=None, sorting_rnns=None):
+    rnn_folder = '/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/'
+    rnn_list = ru.get_list_rnns(rnn_folder=rnn_folder)
+
+    # fig, ax = plt.subplots(5, 5, figsize=(25, 20))
+    if one_ax:
+        fig, ax = plt.subplots(1, 1, figsize=(6, 3))
+    else:
+        fig, ax = plt.subplots(20, 2, figsize=(6, 60), gridspec_kw={'hspace': 0.7})
+    i_row, i_col = 0, 0
+    # epoch_list = [0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 14, 16, 18, 19, 20, 21, 22, 23, 25, 30, 40, 50]
+
+    rot_ind_arr = np.zeros(len(rnn_list))
+    if sorting_rnns is not None:
+        assert len(sorting_rnns) == len(rnn_list)
+        rnn_list = [rnn_list[x] for x in sorting_rnns]
+    for i_rnn, rnn_name in tqdm(enumerate(rnn_list)):
+        if specify_irnn_list is not None:
+            if i_rnn not in specify_irnn_list:
+                continue
+        rnn = ru.load_rnn(os.path.join(rnn_folder, rnn_name))
+        rnn.eval()
+
+        if one_ax:
+            plot_correlation_matrix(rnn=rnn, representation='s1', ax=ax,
+                                        hard_reset=True, plot_mat=False, alpha=1)
+        else:
+            plot_correlation_matrix(rnn=rnn, representation='s1', ax=ax[i_rnn, 0],
+                                        hard_reset=True, plot_mat=False, alpha=1)
+            ax[i_rnn, 0].set_xticks(np.arange(13))
+            ax[i_rnn, 0].set_xticklabels(time_labels_blank[:-1])
+            ax[i_rnn, 0].set_title(f'{i_rnn}, {rnn_name}')
+            plot_correlation_matrix(rnn=rnn, representation='s1', ax=ax[i_rnn, 1])
+
+        corr_mat = rnn.rep_corr_mat_dict['s1']
+        corr_s1s2_block = corr_mat[np.array([2, 3]), :][:, np.array([6, 7])]
+        assert corr_s1s2_block.shape == (2, 2)
+        rot_ind_arr[i_rnn] = np.mean(corr_s1s2_block)
+    print(np.argsort(rot_ind_arr))
+    if one_ax:
+        ax.set_xticks(np.arange(13))
+        ax.set_xticklabels(time_labels_blank[:-1])

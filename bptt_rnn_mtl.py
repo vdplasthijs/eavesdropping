@@ -423,7 +423,7 @@ def specialisation_loss(y_est, y_true, model, eval_times=np.array([9, 10]), late
         eval_times = np.array([11, 12])
     if 'early_match' in model.info_dict.keys():
         if model.info_dict['early_match'] is True:
-            early_match = True 
+            early_match = True
     else:
         early_match = False
     if early_match:
@@ -738,7 +738,7 @@ def train_multiple_decoders(rnn_folder='models/', ratio_expected=0.5,
                             n_samples=None, ratio_train=0.8, label='s1',
                             reset_decoders=False, skip_if_already_decoded=True):
     '''train decoders for all RNNs in rnn_folder'''
-    rnn_list = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
+    rnn_list = ru.get_list_rnns(rnn_folder=rnn_folder)
     for i_rnn, rnn_name in tqdm(enumerate(rnn_list)):
         ## Load RNN:
         with open(rnn_folder + rnn_name, 'rb') as f:
