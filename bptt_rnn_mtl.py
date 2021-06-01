@@ -3,7 +3,7 @@
 # @Email:  thijs.vanderplas@dtc.ox.ac.uk
 # @Filename: bptt_rnn_mtl.py
 # @Last modified by:   thijs
-# @Last modified time: 2021-04-13
+# @Last modified time: 2021-06-01
 
 
 import os, sys, string
@@ -35,7 +35,9 @@ def generate_synt_data_general(n_total=100, t_delay=2, t_stim=2,
     '''Generate synthetic data
 
     nature_stim: onehot, periodic, tuning
-    task: dms, dmc, dmrs, dmrc, discr'''
+    task: dms, dmc, dmrs, dmrc, discr
+    late_s2: if true, present s2 during original GO window (and GO after)
+    early_match: if true, prompt for MNM during S2 presentation'''
     assert (late_s2 and early_match) is False
     # assert late_s2 is False, 'Late s2 not implemented'
     assert ratio_train <= 1 and ratio_train >= 0
@@ -139,6 +141,7 @@ def generate_synt_data_general(n_total=100, t_delay=2, t_stim=2,
 
 
 def fill_onehot_trials(all_seq=None, labels=None, task='dmc', pd=None, late_s2=False):
+    """Add OH data into all_seq."""
     if task == 'dmc':
         n_cat = 2
     elif task == 'dms':
@@ -172,7 +175,7 @@ def fill_onehot_trials(all_seq=None, labels=None, task='dmc', pd=None, late_s2=F
 
 
 def fill_periodic_trials(all_seq=None, labels=None, task='dmc', pd=None, n_cat=4, late_s2=False):
-
+    """Add periodic/4 sample data into all_seq"""
     assert pd['n_total'] % n_cat == 0, 'number of categories not a factor of number of trials'
     assert task == 'dmc' or task == 'dms' or task == 'dmrs' or task == 'dmrc'
     assert n_cat < 10  # to stay within 1 digit with labelling
@@ -264,10 +267,6 @@ class RNN_MTL(nn.Module):
         self.lin_input = nn.Linear(self.n_input, self.n_nodes)
         self.lin_feedback = nn.Linear(self.n_nodes, self.n_nodes)
         self.lin_output = nn.Linear(self.n_nodes, self.n_output)
-        # if self.train_pred_task is False:  # set output weight that should not be used to 0 to prevent unnecessary regularisaiton loss
-        #     self.lin_output.weight[:, :self.n_input] = 0
-        # if self.train_spec_task is False:
-        #     self.lin_output.weight[:, self.n_input:] = 0
         self.init_state()  # initialise RNN nodes
 
         ## Attributes to be completed later:
@@ -384,7 +383,7 @@ class RNN_MTL(nn.Module):
 
 def prediction_loss(y_est, y_true, model, eval_times=np.array([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]),
                     loss_function=None):
-    '''Compute Cross Entropy of given time array eval_times.'''
+    '''Compute Cross Entropy of prediction loss given time array eval_times.'''
     # assert not (simulated_annealing and mnm_only), f'cannot do mnm only and SA simultaneously. sa = {simulated_annealing}, mnm = {mnm_only}'
     assert model.train_pred_task
     assert y_est.shape == y_true.shape
@@ -414,7 +413,7 @@ def regularisation_loss(model, reg_param=None):  # default 0.001
     return reg_loss
 
 def specialisation_loss(y_est, y_true, model, eval_times=np.array([9, 10]), late_s2=False):
-    '''Compute Cross Entropy of given time array eval_times.'''
+    '''Compute Cross Entropy of specialisation loss given time array eval_times.'''
     # assert not (simulated_annealing and mnm_only), f'cannot do mnm only and SA simultaneously. sa = {simulated_annealing}, mnm = {mnm_only}'
     assert model.train_spec_task
     assert y_est.shape == y_true.shape
@@ -434,13 +433,10 @@ def specialisation_loss(y_est, y_true, model, eval_times=np.array([9, 10]), late
     assert y_true_trunc.sum(2).mean() == 1, f'mean: {y_true_trunc.sum(2).mean()}, eval: {eval_times}, neurons {model.n_input}, shape {y_true_trunc.shape}, late_s2: {late_s2}'  # sum should be 1 to use cross entropy
     n_samples = y_true.shape[0]
     ce = torch.sum(-1 * y_true_trunc * torch.log(y_est_trunc)) / n_samples  # take the mean CE over samples, natural log
-    # print(y_est_trunc[:, :, 0].mean())
-    # print(y_est_trunc[:, :, 1].mean())
-    # print(y_true_trunc[:, :, 0].mean())
-    # print(y_true_trunc[:, :, 1].mean())
     return ce
 
 def total_loss(y_est, y_true, model, late_s2):
+    """Compute total loss, pred and spec are taken into account based on info in rnn model"""
     if model.train_pred_task:
         pred_loss = prediction_loss(y_est=y_est, y_true=y_true, model=model)
     else:
@@ -455,6 +451,7 @@ def total_loss(y_est, y_true, model, late_s2):
     return total_error, ratio_reg
 
 def test_loss_append_split(y_est, y_true, model, time_prediction_array_dict=None, late_s2=False):
+    """append split pred losses and spec losses to rnn model"""
     if model.train_pred_task:
         if time_prediction_array_dict is None and late_s2 is False:
             time_prediction_array_dict={'S2': [5, 6], 'G': [9, 10], 'G1': [9], 'G2': [10],
@@ -511,7 +508,7 @@ def bptt_training(rnn, optimiser, dict_training_params, d_dict=None,
         assert ratio_exp_array is not None
         assert d_dict is not None
 
-    if simulated_annealing is False:
+    if simulated_annealing is False:  # use same data [that is passed as arg] on each epoch
         ## Create data loader objects:
         train_ds = TensorDataset(x_train, y_train)
         train_dl = DataLoader(train_ds, batch_size=dict_training_params['bs'])
@@ -519,7 +516,7 @@ def bptt_training(rnn, optimiser, dict_training_params, d_dict=None,
         test_ds = TensorDataset(x_test, y_test)
         test_dl = DataLoader(test_ds, batch_size=dict_training_params['bs'])
         total_epochs = dict_training_params['n_epochs']
-    else:
+    else: # generate new data on each epoch (with varying ratio_exp)
         print('Sim annealing')
         total_epochs = len(ratio_exp_array)
         assert total_epochs == dict_training_params['n_epochs']
@@ -619,6 +616,10 @@ def bptt_training(rnn, optimiser, dict_training_params, d_dict=None,
 def train_decoder(rnn_model, x_train, x_test, labels_train, labels_test,
                   save_inplace=False, label_name='s1', sparsity_c=1e-1,
                   bool_train_decoder=True, decoder_type='logistic_regression'):
+
+    """Train decoder on rnn_model given data, for label_name representaoitn.
+    if bool_train_decoder is False, then the decoder is not trained (but a forward pass
+    is done). If save_inplace is True the results are saved in the RNN (and they are always returned)"""
     n_nodes = rnn_model.info_dict['n_nodes']
     forw_mat = {'train': np.zeros((x_train.shape[0], x_train.shape[1], n_nodes)),  # trials x time x neurons
                  'test': np.zeros((x_test.shape[0], x_test.shape[1], n_nodes))}
@@ -737,7 +738,9 @@ def train_single_decoder_new_data(rnn, ratio_expected=0.5, label='s1',
 def train_multiple_decoders(rnn_folder='models/', ratio_expected=0.5,
                             n_samples=None, ratio_train=0.8, label='s1',
                             reset_decoders=False, skip_if_already_decoded=True):
-    '''train decoders for all RNNs in rnn_folder'''
+    '''train decoders for all RNNs in rnn_folder. If reset_decoders; train always. Else
+    if skip_if_already_decoded is True, then skip if trained decoder already exists in RNN class.
+    NB: This could be a different decoder, as they are not saved by representation or decoder type (eg log reg, lda)'''
     rnn_list = ru.get_list_rnns(rnn_folder=rnn_folder)
     for i_rnn, rnn_name in tqdm(enumerate(rnn_list)):
         ## Load RNN:
@@ -758,6 +761,7 @@ def train_multiple_decoders(rnn_folder='models/', ratio_expected=0.5,
     return None
 
 def save_pearson_corr(rnn, representation='s1', set_nans=True, save_inplace=False):
+    """Compute cross correlation and save"""
     assert representation == 's1' or representation == 's1' or representation == 'go'
     assert rnn.info_dict['nature_stim'] == 'onehot' and rnn.info_dict['type_task'] in ['dmc', 'dms'], 'not implemented'
     ## get forward activity
@@ -784,16 +788,14 @@ def save_pearson_corr(rnn, representation='s1', set_nans=True, save_inplace=Fals
     if save_inplace:
         assert False
         # rnn.save_model(folder=rnn_folder, verbose=0, allow_name_change=False)  # save results to file
-
     return corr_mat
-
-
 
 def execute_rnn_training(nn, n_simulations, t_dict, d_dict, nature_stim='',
                         type_task='', task_name='', device='', late_s2=False,
                         train_task='', save_folder='', use_gpu=False,
                         simulated_annealing=False, ratio_exp_array=None,
                         save_state=False):
+    """Create data, RNN and train using all input parameters"""
     print(f'\n-----------\nsimulation {nn}/{n_simulations}')
 
     ## Ensure seeds change with multi processing
@@ -865,6 +867,7 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
                         late_s2=False, nature_stim='onehot', type_task='dmc',
                         train_task='pred_only', simulated_annealing=False, ratio_exp_array=None,
                         save_state=False):
+    """Train n_simulations of RNN given argument. Uses multiprocessing by default"""
     assert type_task in ['dms', 'dmc', 'dmrs', 'dmrc']
     assert train_task in ['pred_only', 'spec_only', 'pred_spec']
     if train_task == 'pred_only':
@@ -900,6 +903,7 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                  sparsity_list=[1e-3], n_sim=10, use_gpu=False, sweep_n_nodes=False,
                  late_s2=False, ratio_exp=0.75, simulated_annealing=False,
                  save_state=False, early_match=False):
+    """Train n_simulations RNNs per set of conditions, for each set of conditions that are in arg"""
     assert (late_s2 and simulated_annealing) is False
     assert (sweep_n_nodes and simulated_annealing) is False
     assert (early_match and simulated_annealing) is False

@@ -3,7 +3,7 @@
 # @Email:  thijs.vanderplas@dtc.ox.ac.uk
 # @Filename: rot_utilities.py
 # @Last modified by:   thijs
-# @Last modified time: 2020-05-22
+# @Last modified time: 2021-06-01
 
 
 
@@ -38,7 +38,8 @@ def angle_vecs(v1, v2):
 
 
 def angle_sensory_memory(forw,  ol=None):
-
+    """OLD"""
+    assert False, 'double check if function still ok'
     ind_sens_alpha_1 = np.array([x[0] == '1' for x in forw['labels_train']])  # alpha == 1
     ind_sens_alpha_2 = np.array([x[0] == '2' for x in forw['labels_train']])  # alpha == 2
 
@@ -66,6 +67,8 @@ def angle_sensory_memory(forw,  ol=None):
     return angle_alpha_beta, (av_alpha_act, av_beta_act)
 
 def find_max_or_min(array, dimension=0):
+    """OLD"""
+    assert False, 'double check if function still ok'
     assert array.ndim == 2
 
     amin = np.amin(array, axis=dimension)
@@ -94,6 +97,7 @@ def find_stable_switch_neurons_activity(forw_mat, diff_th=1, n_tp_sign=2, tt='te
     2-tuple, 2-tuple
         (number of stable cells, number of switch cells), (inds stable cells, inds switch cells)
     """
+    assert False, 'double check if function still ok'
     labels_use_1 = np.array([x[0] == '1' for x in forw_mat['labels_' + tt]])
     labels_use_2 = np.array([x[0] == '2' for x in forw_mat['labels_' + tt]])
     mean_response_1 = forw_mat[tt][labels_use_1, :, :].mean(0)
@@ -117,6 +121,7 @@ def find_stable_switch_neurons_activity(forw_mat, diff_th=1, n_tp_sign=2, tt='te
 
 def connect_mnm_stsw(rnn, stable_inds=np.array([]), switch_inds=np.array([]),
                      weight_threshold=0.1, verbose=0, proj_type='threshold'):
+    assert False, 'double check if function still ok'
     assert rnn.lin_output.out_features > rnn.n_stim, 'this RNN does not have M and NM output neurons'
     assert rnn.lin_output.out_features == 10
     output_ind = {'match': 8, 'nonmatch': 9}  # inds of output neurons
@@ -144,6 +149,7 @@ def connect_mnm_stsw(rnn, stable_inds=np.array([]), switch_inds=np.array([]),
     return sign_weight_types
 
 def create_color_mat(x, c):
+    """OLD"""
     c_mat = np.zeros((len(x) - 1, 4))
     if c == 'green':
         c_mat[:, 1] = 0.5
@@ -159,6 +165,7 @@ def create_color_mat(x, c):
 
 def rmse_matrix_symm(matrix, subtract=0.5):
     '''Return RMSE of the two upper-/lower-diagonal triangular halves'''
+    assert False, 'double check if function still ok'
     n, _ = np.shape(matrix)
     rmse = 0
     low_tri_sum = 0
@@ -180,12 +187,15 @@ def rmse_matrix_symm(matrix, subtract=0.5):
     return (rmse, low_tri_sum)
 
 def load_rnn(rnn_name):
+    """Load RNN"""
     with open(rnn_name, 'rb') as f:
         rnn = pickle.load(f)
     rnn.eval()
     return rnn
 
 def make_df_network_size(rnn_folder):
+    """OLD"""
+    assert False, 'check if function still ok'
     rnn_names = get_list_rnns(rnn_folder=rnn_folder)
     df_data = pd.DataFrame({x: np.zeros(len(rnn_names)) for x in ['n_nodes', 'min_test_perf']})
     for i_rnn, rnn_name in enumerate(rnn_names):
@@ -197,6 +207,7 @@ def make_df_network_size(rnn_folder):
     return df_data
 
 def labels_to_mnm(labels):
+    assert False, 'check if function still ok'
     if type(labels) == str:  # just one label
         match = (labels[0] == labels[1])
         return np.array([int(match), int(not match)])
@@ -209,11 +220,13 @@ def labels_to_mnm(labels):
         return match_array
 
 def get_train_test_diag():
+    assert False, 'check if function still ok'
     tmp_train, tmp_test = (np.array([8, 9, 10, 9, 10, 11, 10, 11, 12, 11, 12, 13, 12, 13, 14, 13, 14, 15, 14, 15, 16, 15, 16, 16]),
                            np.array([4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 12]))
     return (tmp_train, tmp_test)
 
 def rotation_index(mat, times_early=[4], times_late=[6]):
+    assert False, 'check if function still ok'
     ## currently; assume square of early/late. Alternatively, ask for 2 tuples
     times_early = np.array(times_early)
     times_late = np.array(times_late)
@@ -240,6 +253,7 @@ def rotation_index(mat, times_early=[4], times_late=[6]):
     return rot
 
 def timestamp_max_date(rnn_name, date_max='2021-05-17', verbose=0):
+    """return True if timestamp of rnn_name is younger than date_max"""
     if rnn_name[-5:] == '.data':
         rnn_name = rnn_name[:-5]
     date = rnn_name[8:18]
@@ -271,6 +285,7 @@ def timestamp_max_date(rnn_name, date_max='2021-05-17', verbose=0):
                 return True
 
 def timestamp_min_date(rnn_name, date_min='2021-05-17', verbose=0):
+    """Return True if timestamp of rnn_name is older than date_min"""
     if rnn_name[-5:] == '.data':
         rnn_name = rnn_name[:-5]
     date = rnn_name[8:18]
@@ -302,11 +317,22 @@ def timestamp_min_date(rnn_name, date_min='2021-05-17', verbose=0):
                 return True
 
 def get_list_rnns(rnn_folder=''):
+    """Get list of rnns in folder, and possibly take timestap into account"""
     list_rnns = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data' and timestamp_max_date(rnn_name=x, date_max='2021-05-17')]
     return list_rnns
 
 def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=False,
                            method='integral', verbose=0):
+    """Compute learning index, meaning how well rnns converge. Do for all losses in list_loss.
+    methods:
+    integral: mean of all data points per rnn
+    mean_integral: above but also averaged across rnns
+    final_loss: average of final 5 data points
+    half_time: time for which np.diff is smallest (ie greatest negative)
+    agrmin_gradient:  same but with np.gradient
+    """
+
+    assert normalise_start is False
     list_rnns = get_list_rnns(rnn_folder=rnn_folder)
     if verbose > 0:
         print(rnn_folder, len(list_rnns))
@@ -359,7 +385,8 @@ def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=
 def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='7525',
                                        nature_stim_list=['onehot', 'periodic'], method='integral',
                                        sparsity_str_list = ['0e+00', '1e-06', '5e-06', '1e-05', '5e-05', '1e-04', '5e-04', '1e-03', '5e-03', '1e-02', '5e-02', '1e-01']):
-
+    """For each combination of conditions as given by input args, compute learning efficiency indeces
+    of each rnn and save everything in a df"""
     n_sim = 200
     n_loss_functions_per_sim = 4
     n_data = len(task_list) * len(nature_stim_list) * len(sparsity_str_list) * n_loss_functions_per_sim * n_sim
@@ -407,17 +434,16 @@ def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='
     elif i_conf < n_data:
         learn_eff_df = learn_eff_df[:i_conf]
         print(f'Cutting of DF because of empty rows')
-
-
     return learn_eff_df
 
 def two_digit_sci_not(x):
+    """Return 2 digit scientifi cnotation"""
     sci_not_spars = np.format_float_scientific(x, precision=0)
     sci_not_spars = sci_not_spars[0] + sci_not_spars[2:]  # skip dot
     return sci_not_spars
 
 def count_datasets_sparsity_sweep(super_folder='/home/thijs/repos/rotation/models/7525'):
-
+    """Count number of network simulation per condition"""
     task_folders = os.listdir(super_folder)
     task_nat_folder_dict = {}
     sparsity_list = []
@@ -453,16 +479,16 @@ def count_datasets_sparsity_sweep(super_folder='/home/thijs/repos/rotation/model
                 n_ds_dict[task_nat][i_spars] = 0
 
     return pd.DataFrame(n_ds_dict)
-    # print(n_ds_dict)
 
 def ensure_corr_mat_exists(rnn, representation='s1'):
-    ## if not pre-calculated, then calculate now:
+    """if not pre-calculated, then calculate now:"""
     if hasattr(rnn, 'rep_corr_mat_dict') is False:
         bpm.save_pearson_corr(rnn=rnn, representation=representation)
     elif representation not in rnn.rep_corr_mat_dict.keys():
         bpm.save_pearson_corr(rnn=rnn, representation=representation)
 
 def calculate_autotemp_different_epochs(rnn, epoch_list=[1, 2, 3, 4], autotemp_dec_dict=None):
+    """Calculating autotemp accuracy of S1 for list of epochs of rnn, unless entry already exists in dict"""
     n_tp = 13
     assert hasattr(rnn, 'saved_states_dict'), f'{rnn} does not have saved states '
     rnn.eval()
@@ -477,6 +503,7 @@ def calculate_autotemp_different_epochs(rnn, epoch_list=[1, 2, 3, 4], autotemp_d
     return autotemp_dec_dict
 
 def calculate_diff_activity(forw, representation='s1'):
+    """Calculate differentiated neural activity, for representation (hence must ideally be binary)"""
     if representation == 'go':
         labels_use_1 = np.array([x[1] != 'x' for x in forw['labels_train']])  # expected / match
         labels_use_2 = np.array([x[1] == 'x' for x in forw['labels_train']])  # unexpected / non match
@@ -500,6 +527,7 @@ def calculate_diff_activity(forw, representation='s1'):
 
 def inspect_sparsity_effect_weights(super_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot',
                                     th_nz=0.1):
+    """Create mapping between sparsity value and real world value (eg number of nonzero)"""
     spars_folders = os.listdir(super_folder)
     # print(spars_folders)
     # return

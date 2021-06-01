@@ -2,7 +2,7 @@
 # @Date:   2021-04-14
 # @Email:  thijs.vanderplas@dtc.ox.ac.uk
 # @Last modified by:   thijs
-# @Last modified time: 2021-04-14
+# @Last modified time: 2021-06-01
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -38,6 +38,13 @@ spec_only_colour = [207 / 255, 143 / 255, 23 / 255]
 pred_spec_colour = [73 / 255, 154 / 255, 215 / 255]
 
 def set_fontsize(font_size=12):
+    """Change font size of all matplotlib items.
+
+    Parameters
+    ----------
+    font_size : int/float
+        new fontsie .
+    """
     plt.rcParams['font.size'] = font_size
     plt.rcParams['axes.autolimit_mode'] = 'data' # default: 'data'
     params = {'legend.fontsize': font_size,
@@ -48,13 +55,33 @@ def set_fontsize(font_size=12):
     plt.rcParams.update(params)
 
 def despine(ax):
+    """Despines axes
+
+    Parameters
+    ----------
+    ax : ax
+        ax to despine
+    """
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     return ax
 
 def opt_leaf(w_mat, dim=0):
     '''create optimal leaf order over dim, of matrix w_mat. if w_mat is not an
-    np.array then its assumed to be a RNN layer. see also: https://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.optimal_leaf_ordering.html#scipy.cluster.hierarchy.optimal_leaf_ordering'''
+    np.array then its assumed to be a RNN layer. see also: https://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.optimal_leaf_ordering.html#scipy.cluster.hierarchy.optimal_leaf_ordering
+
+    Parameters
+    ----------
+    w_mat : np array or pytorch network layer
+        2D matrix to sort by
+    dim: 0 or 1
+        dimension to sort along
+
+    Returns:
+    ----------
+    opt_leaves: np array
+        sorted indices
+    '''
     if type(w_mat) != np.ndarray:  # assume it's an rnn layer
         w_mat = [x for x in w_mat.parameters()][0].detach().numpy()
     assert w_mat.ndim == 2
@@ -72,8 +99,48 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
                                                             '0', '0_postS1', '0_postS2', '0_postG']},
                     linestyle_custom_dict={}, colour_custom_dict={},
                     plot_std=True, plot_indiv=False):
+    """Function that plots the performance (after convergence), split by loss function.
+    Can take single RNN or folder of RNNs.
+
+    Parameters
+    ----------
+    rnn_name : str
+        filename.
+    rnn_folder : str
+        folder containing rnns.
+    ax_top : ax
+        main ax.
+    ax_bottom : ax
+        second ax, optional (for L1 regularisation loss i believe).
+    normalise_start : bool
+        whether to normalise start value.
+    plot_top : bool
+        whether to plot top .
+    plot_bottom : bool
+        same
+    list_top : list
+        list of split loss function names to plot
+    lw : float
+        linewidth
+    plot_total : bool
+        plot total loss function
+    label_dict_keys : dict
+        dictionary with legend labels .
+    linestyle_custom_dict : dict
+        dictionary with linestyles (per loss func).
+    colour_custom_dict : dict
+        same with line colors
+    plot_std : bool
+        plot confidence interval (shaded area)
+    plot_indiv : bool
+        plot individual rnn traces
+
+    Returns:
+    (ax_top, ax_bottom)
+    """
     if normalise_start:
         print('Normalising loss functions')
+        assert False, 'do not normalise start value'
     if ax_top is None and plot_top:
         ax_top = plt.subplot(211)
     if ax_bottom is None and plot_bottom:
@@ -87,14 +154,11 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
         else:
             list_rnns = ru.get_list_rnns(rnn_folder=rnn_folder)
 
-    # print(label_dict_keys)
+    ## Get loss function per RNN
     n_rnn = len(list_rnns)
     for i_rnn, rnn_name in enumerate(list_rnns):
         rnn = ru.load_rnn(rnn_name=os.path.join(rnn_folder, rnn_name))
-        # if 'dmc' in rnn.test_loss_split.keys():
-            # print(rnn.test_loss_split['dmc'][-3:])
         if i_rnn == 0:
-            # print(rnn.info_dict['pred_loss_function'])
             n_tp = rnn.info_dict['n_epochs']
             # if 'simulated_annealing' in list(rnn.info_dict.keys()) and rnn.info_dict['simulated_annealing']:
             #     pass
@@ -106,11 +170,11 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
         else:
             assert rnn.info_dict['n_epochs'] == n_tp
         for key, arr in rnn.test_loss_split.items():
-            # if key != 'pred':
             conv_dict[key][i_rnn, :] = arr.copy()
         if plot_total:
             conv_dict['pred_sep'][i_rnn, :] = np.sum([conv_dict[key][i_rnn, :] for key in ['0', 'S2', 'G']], 0)
 
+    ## Set stule
     i_plot_total = 0
     dict_keys = list(conv_dict.keys())[::-1]
     colour_dict_keys = {key: color_dict_stand[it] for it, key in enumerate(['S2', 'G', 'L1', 'dmc', '0', 'pred', 'pred_sep'])}
@@ -121,17 +185,14 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
     for key, val in linestyle_custom_dict.items():
         linestyle_dict_keys[key] = val
 
+    ## Plot
     for key in dict_keys:
         mat = conv_dict[key]
         if normalise_start:
             mat = mat / np.mean(mat[:, 0])#[:, np.newaxis]
         plot_arr = np.mean(mat, 0)
-        # if normalise_start:
-        #     plot_arr = plot_arr / plot_arr[0]
         if plot_top:
             if (list_top is not None and key in list_top) or (list_top is None and '_' not in key and 'L' not in key):
-                # print(key)
-                # print(label_dict_keys.keys(), linestyle_dict_keys.keys(), colour_dict_keys.keys())
                 ax_top.plot(plot_arr, label=label_dict_keys[key], linestyle=linestyle_dict_keys[key], linewidth=lw, color=colour_dict_keys[key])
                 if plot_std:
                     ax_top.fill_between(x=np.arange(len(plot_arr)), y1=plot_arr - np.std(mat, 0),
@@ -161,11 +222,39 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
     return (ax_top, ax_bottom)
 
 def len_data_files(dir_path):
+    """Returns number of rnns in folder
+
+    Parameters
+    ----------
+    dir_path : str
+        forlder path
+
+    Returns
+    -------
+    int
+        number of rnns
+    """
     return len(ru.get_list_rnns(rnn_folder=dir_path))
 
 def plot_split_perf_custom(folder_pred=None, folder_dmcpred=None, folder_dmc=None, ax=None,
                            plot_legend=True, legend_anchor=(1, 1), task_type='dmc',
                            plot_std=True, plot_indiv=False, plot_pred=True, plot_spec=True):
+    """Function that plots pred loss and spec loss for pred only, spec only and combined rnns .
+
+    Parameters
+    ----------
+    folder_pred : str
+        folder with pred only rnns
+    folder_dmcpred : str
+        folder with multitask rnns
+    folder_dmc : str
+        folder with spec only rnns .
+
+    Returns
+    -------
+    ax
+
+    """
     if ax is None:
         ax = plt.subplot(111)
 
@@ -217,6 +306,8 @@ def plot_split_perf_custom(folder_pred=None, folder_dmcpred=None, folder_dmc=Non
 
 def plot_n_nodes_convergence(parent_folder='/home/thijs/repos/rotation/models/sweep_n_nodes/7525/dmc_task/onehot/sparsity_5e-03/',
                    plot_legend=True, ax=None, plot_std=True, plot_indiv=False):
+    """Function that plots convergence of rnns depending on n nodes
+    """
     list_child_folders = os.listdir(parent_folder)
     if ax is None:
         ax = plt.subplot(111)
@@ -236,6 +327,13 @@ def plot_n_nodes_convergence(parent_folder='/home/thijs/repos/rotation/models/sw
 
 def plot_n_nodes_sweep(parent_folder='/home/thijs/repos/rotation/models/sweep_n_nodes/7525/dmc_task/onehot/sparsity_1e-03/',
                   verbose=0, ax=None, method='integral', color='k', print_labels=True):
+    """Function that plots performance per number of nodes
+
+    Parameters
+    ----------
+    parent_folder : str
+        folder containing folders with n_nodes ..
+    """
     list_child_folders = os.listdir(parent_folder)
     if ax is None:
         ax = plt.subplot(111)
@@ -263,6 +361,13 @@ def plot_n_nodes_sweep(parent_folder='/home/thijs/repos/rotation/models/sweep_n_
 
 def plot_n_nodes_sweep_multiple(super_folder='/home/thijs/repos/rotation/models/sweep_n_nodes/7525/dmc_task/onehot',
                                 ax=None, method='integral'):
+    """Function that plots n nodes sweep for multiple sparsity values
+
+    Parameters
+    ----------
+    super_folder : str
+        folder containing different sparsity values
+    """
     if ax is None:
         ax = plt.subplot(111)
     spars_folders = os.listdir(super_folder)
@@ -273,9 +378,7 @@ def plot_n_nodes_sweep_multiple(super_folder='/home/thijs/repos/rotation/models/
                             color='#696969')
                             # color=color_dict_stand[ii])
         label_list.append(spars_folder.split('_')[1])
-        # if ii == 5:
-        #     break
-    # ax.legend(label_list, frameon=False)
+
     if method == 'integral':
         ax.set_ylim([0.5, 1.05])
 
@@ -286,6 +389,8 @@ def plot_n_nodes_sweep_multiple(super_folder='/home/thijs/repos/rotation/models/
 def plot_late_s2_comparison(late_s2_folder='/home/thijs/repos/rotation/models/late_s2/7525/dmc_task/onehot/sparsity_1e-03/pred_only',
                             early_s2_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/pred_only',
                             method='integral', ax=None):
+    """Function plotting pointplot of regular (early) s2 performance and late s2 performance.
+    """
     if ax is None:
         ax = plt.subplot(111)
     learn_eff_dict = {}
@@ -324,6 +429,7 @@ def plot_late_s2_comparison(late_s2_folder='/home/thijs/repos/rotation/models/la
 def plot_stl_mtl_comparison(dmc_only_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/dmc_only/',
                             pred_dmc_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
                             method='integral', ax=None):
+    """Function that quantifies eavesdropping effect (between STL and MTL networks )"""
     if ax is None:
         ax = plt.subplot(111)
     learn_eff_dict = {}
@@ -366,6 +472,8 @@ def plot_stl_mtl_comparison(dmc_only_folder='/home/thijs/repos/rotation/models/7
 def plot_7525_5050_comparison(folder_50='/home/thijs/repos/rotation/models/5050/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
                             folder_75='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
                             method='integral', ax=None):
+    """Quantify eavesdropping  difference between correlated and uncorrelated networks
+    """
     if ax is None:
         ax = plt.subplot(111)
     learn_eff_dict = {}
@@ -411,7 +519,8 @@ def plot_7525_5050_comparison(folder_50='/home/thijs/repos/rotation/models/5050/
 def plot_example_trial(trial, ax=None, yticklabels=output_vector_labels,
                        xticklabels=time_labels_blank[1:], c_bar=True,
                        vmin=None, vmax=None, c_map='magma', print_labels=True):
-    '''Plot 1 example trial'''
+    """Plot raster of one trial.
+    """
     if ax is None:
         ax = plt.subplot(111)
 
@@ -431,6 +540,21 @@ def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_
                                        sparsity_str='1e-03', ax=None, plot_legend=True, verbose=0,
                                        plot_std=True, plot_indiv=False, plot_pred=True, plot_spec=True,
                                        plot_title=True):
+    """Function that shows convergence of rnns. Parameters define the folder that are loaded
+    and passed on to plot_split_perf()
+
+    Parameters
+    ----------
+    task : str
+        task type dmc dms dmrc dmrs
+    ratio_exp_str : str
+        stim correlation ratio
+    nature_stim : str
+        onehot or periodic
+    sparsity_str : str
+        sparsity value
+
+    """
    base_folder = f'models/{ratio_exp_str}/{task}_task/{nature_stim}/sparsity_{sparsity_str}/'
    # print('USING SAVED STATE')
    folders_dict = {}
@@ -462,6 +586,20 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
                              method='integral', nature_stim_list=['periodic', 'onehot'], ax=None,
                              plot_custom_legend=False, plot_title=False, leg_anchor=(0, 1.05), leg_cols=2,
                              new_x_axis_df=None):
+    """Function that plots eavesdropping effect as a function of sparsity. Either plot
+    both STL and MTl, or plot difference between these two. Can take multiple tasks and nature-stim
+
+
+    Parameters
+    ----------
+    plot_difference : bool
+        whether to plot difference
+    indicate_sparsity : bool
+        add clarification on x axis label of what is sparser
+    new_x_axis_df : pd.df
+        dataframe that contains the mapping of sparsity value (that would be on x axis) to number of non zero connections
+
+    """
     df = ru.calculate_all_learning_eff_indices(method=method, task_list=task_list,
                                                 nature_stim_list=nature_stim_list)
     # assert len(task_list) == 2
@@ -490,8 +628,6 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
             sns.lineplot(data=tmp_df[tmp_df['nature_stim'] == nat], x=xaxis_name, y='learning_eff',
                          style='task', ax=ax[i_plot], color='k', linewidth=3,
                          markers=True,  err_kws={'alpha':0.1}, label='Difference')
-            # ax[i_plot].plot([0, 0.2], [0, 0], c='grey')
-            # ax[i_plot].set_ylabel(f'Eavesdropping effect\n(difference in {method})')
             i_plot += 1
     else:
         spec_task_df = df[[x.split('_')[0] in task_list for x in df['loss_comp']]]
@@ -506,8 +642,6 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
                          hue='setting', style='task', markers=True, ci=95, linewidth=1.5,
                          ax=ax[i_plot], hue_order=['multi', 'single'], palette=colour_dict,
                          err_kws={'alpha':0.1}, **{'alpha': 0.5})
-            # ax[i_plot].set_ylim([0, 1.1])
-            # ax[i_plot].set_ylabel('Learning efficiency index\n(= integral loss function)')
             i_plot += 1
     for i_plot in range(len(ax)):
         if len(nature_stim_list) > 1:
@@ -520,7 +654,6 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
             ax[i_plot].get_legend().remove()
         if new_x_axis_df is None:
             ax[i_plot].set_xlabel('Sparsity regularisation')
-            # ax[i_plot].set_xscale('log', nonposx='clip')
             ax[i_plot].set_xscale('symlog', linthreshx=2e-6)
         else:
             ax[i_plot].set_xlabel('Fraction of nonzero connections')
@@ -553,9 +686,11 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
     return df
 
 def plot_bar_plot_all_tasks(ax=None, method='final_loss', save_fig=False):
+    """Function that plots the bar plots showing the cumulative eavesdropping
+    effect across sparsity values
 
-# task_list=['dms', 'dmc'], plot_difference=False, indicate_sparsity=False,
-#                              method='integral', nature_stim_list=['periodic', 'onehot'], ax=None,
+    """
+
     if ax is None:
         ax = plt.subplot(111)
     task_nat_comb = (['dmc', 'onehot'], ['dmc', 'periodic'], ['dmrc', 'periodic'],
@@ -580,7 +715,6 @@ def plot_bar_plot_all_tasks(ax=None, method='final_loss', save_fig=False):
         tmp_df['learning_eff'][multi_rows] *= -1   # multiple effiency with -1 so the difference can be computed using condition-specific sum
         tmp_df = tmp_df.groupby(['task', 'nature_stim', 'sparsity']).sum()  # effectively comppute difference
         tmp_df.reset_index(inplace=True)  # bring multi indexes back to column values
-        # print(tmp_df['learning_eff'].sum(), task_list, nature_stim_list)
 
         cum_eavesdropping_effect[key] = tmp_df['learning_eff'].sum()
 
@@ -605,8 +739,12 @@ def plot_bar_plot_all_tasks(ax=None, method='final_loss', save_fig=False):
     despine(ax)
     if save_fig:
         plt.savefig('figures/nips/fig3_other-tasks_v2.pdf', bbox_inches='tight')
+
 def plot_sa_convergence(sa_folder_list=['/home/thijs/repos/rotation/models/simulated_annealing/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc'],
                         figsize=None, plot_std=True, plot_indiv=False):
+    """Function plotting convergence of simulated annealing networks by plotting both
+    ratio_expected-array and loss function, for the foldres given in the list .
+    """
     if figsize is None:
         figsize = (5 * len(sa_folder_list), 3)
     fig = plt.figure(constrained_layout=False, figsize=figsize)
@@ -652,6 +790,8 @@ def plot_sa_convergence(sa_folder_list=['/home/thijs/repos/rotation/models/simul
 
 def plot_autotemp_s1_decoding(parent_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/',
                               ax=None, plot_legend=False):
+    """Plot autotemporal decoding accuracy for pred only, spec only and pred spec networks .
+    """
 
     if ax is None:
         ax = plt.subplot(111)
@@ -695,7 +835,7 @@ def plot_autotemp_s1_decoding(parent_folder='/home/thijs/repos/rotation/models/7
 
 def plot_autotemp_all_reps_decoding(rnn_folder='/home/thijs/repos/rotation/models/7525/dms_task/onehot/sparsity_1e-04/pred_dms/',
                               ax=None, plot_legend=True, reset_decoders=True, skip_if_already_decoded=False):
-
+    """Plot autotemporal decoding for S1, S2 and MNM """
     if ax is None:
         ax = plt.subplot(111)
 
@@ -739,6 +879,9 @@ def plot_autotemp_all_reps_decoding(rnn_folder='/home/thijs/repos/rotation/model
 
 def plot_correlation_matrix(rnn, representation='s1', ax=None, hard_reset=False,
                             plot_mat=True, alpha=1, plot_diag=True, plot_cbar=True):
+    """Plot cross correlation matrix of rnn, of given representation. If plot_mat is False ,
+    then plot the neural code (S1 cross corr over time). if hard_reset, recompute cross corr.
+    """
     if ax is None:
         ax = plt.subplot(111)
 
@@ -757,15 +900,16 @@ def plot_correlation_matrix(rnn, representation='s1', ax=None, hard_reset=False,
         else:
             mask[np.tril_indices_from(plot_mat, k=0)] = True
 
+        ## Plot full cross correlation matrix:
         # sns.heatmap(full_mat, cmap='BrBG',
         #             ax=ax, xticklabels=time_labels_blank[:-1], yticklabels=time_labels_blank[:-1],
         #             cbar='BrBG', vmin=-1, vmax=1)
 
+        ## Plot triangular matrix:
         sns.heatmap(plot_mat, cmap='BrBG', mask=mask, rasterized=True, linewidths=0,
                     ax=ax, xticklabels=time_labels_blank[2:-5], yticklabels=time_labels_blank[2:-5],
                     cbar=plot_cbar, vmin=-1, vmax=1, square=True)
         ax.set_yticklabels(rotation=0, labels=ax.get_yticklabels())
-        # ax.set_xticklabels(rotation=90, labels=ax.get_yticklabels())
         ax.set_ylabel('Time')
         ax.set_xlabel('Time')
         ax.invert_yaxis()
@@ -792,7 +936,9 @@ def plot_correlation_matrix(rnn, representation='s1', ax=None, hard_reset=False,
         ax.set_ylabel('Cross correlation')
         ax.set_xticks(np.arange(n_tp))
         ax.set_xticklabels(time_labels_blank[:-1])
+
 def plot_decoding_matrix(rnn, representation='s1', ax=None):
+    """Plot cross temporal decoding accuracy matrix """
     if ax is None:
         ax = plt.subplot(111)
 
@@ -810,6 +956,8 @@ def plot_decoding_matrix(rnn, representation='s1', ax=None):
     ax.set_ylim(bottom - 0.5, top + 1.5)
 
 def plot_hist_rot_indices(rnn_folder, representation='s1', ax=None, verbose=0):
+    """Plot histogram of rotation indeces of rnns in folder. Index determined as
+    average S1-S2 cross correlation"""
     if ax is None:
         ax = plt.subplot(111)
 
@@ -820,7 +968,7 @@ def plot_hist_rot_indices(rnn_folder, representation='s1', ax=None, verbose=0):
         rnn = ru.load_rnn(os.path.join(rnn_folder, rnn_name))
         ru.ensure_corr_mat_exists(rnn=rnn, representation=representation)
         corr_mat = rnn.rep_corr_mat_dict[representation]
-        corr_s1s2_block = corr_mat[np.array([2, 3]), :][:, np.array([6, 7])]
+        corr_s1s2_block = corr_mat[np.array([2, 3]), :][:, np.array([6, 7])]  # extract s1-s2 cross correlation.
         assert corr_s1s2_block.shape == (2, 2)
         rot_ind_arr[i_rnn] = np.mean(corr_s1s2_block)
         if rnn.info_dict['task'] == 'pred_dmc' and verbose > 0:
@@ -845,6 +993,10 @@ def plot_autotemp_s1_different_epochs(rnn_folder='/home/thijs/repos/rotation/mod
                                       add_labels=False,
                                       epoch_list=[1, 2, 4, 6, 8, 10, 12, 15, 18, 20, 25, 40],
                                       ax=None, plot_legend=True, autotemp_dec_mat_dict=None):
+    """Plot autotemp corr of S1 represention for different epochs. Averaged over
+    rnns in the rnn_folder. This is saved in autotemp_dec_mat_dict, which is returned.
+    It can also be passed as arg, bypassing the calculation (and saving a lot of time).
+    """
     if ax is None:
         ax = plt.subplot(111)
     n_tp = 13
@@ -883,10 +1035,12 @@ def plot_autotemp_s1_different_epochs(rnn_folder='/home/thijs/repos/rotation/mod
 
     return autotemp_dec_mat_dict
 
-
 def plot_raster_trial_average(plot_diff, ax=None, reverse_order=False,
                               c_bar=True, ol=None, th=None, plot_title=True,
-                              index_label=0, representation='s1'):
+                              representation='s1'):
+    """Plot raster plot [of trial av activity] of plot_diff. It is sorted unless
+    a sorted array ol is passed as arg.
+    """
     if representation == 'go':
         plot_cmap = 'RdGy'
     elif representation == 's1' or representation == 's2':
@@ -913,15 +1067,12 @@ def plot_raster_trial_average(plot_diff, ax=None, reverse_order=False,
     ax.invert_yaxis()
     ax.set_xticklabels(rotation=0, labels=ax.get_xticklabels())
     bottom, top = ax.get_ylim()
-    # print(bottom, top)
-    # ax.set_ylim(bottom - 0.5, top + 3.5)
     ax.set_ylim([0, plot_diff.shape[0]])
     if plot_title:
         ax.set_title(f'Activity difference dependent on {representation}', loc='left', weight='bold')
     ax.set_xlabel('Time');
 
     return ol
-
 
 def plot_weights(rnn_layer, ax=None, title='weights', xlabel='',
                  ylabel='', xticklabels=None, yticklabels=None,
@@ -983,6 +1134,8 @@ def plot_all_UWVT(rnn_model, freq_labels='', weight_order=None, ax_w=None, th=No
     return (fig, ax_w)
 
 def plot_example_codes(one_ax=True, specify_irnn_list=None, sorting_rnns=None):
+    """Plot neural memory code of rnns in rnn_folder. Either plot the 1D code (mean S1 cross corr)
+    of all rnns on 1 ax, or plot 1D and 2D cross corr for each rnn on a new row."""
     rnn_folder = '/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/'
     rnn_list = ru.get_list_rnns(rnn_folder=rnn_folder)
 
