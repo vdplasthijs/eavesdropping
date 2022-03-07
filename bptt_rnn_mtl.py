@@ -899,19 +899,23 @@ def init_train_save_rnn(t_dict, d_dict, n_simulations=1, use_multiproc=True,
 
 
 def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
-                 train_task_list=['pred_only', 'spec_only', 'pred_spec'],
-                 sparsity_list=[1e-3], n_sim=10, use_gpu=False, sweep_n_nodes=False,
+                #  train_task_list=['pred_only', 'spec_only', 'pred_spec'],
+                 train_task_list=['spec_only', 'pred_spec'],
+                 sparsity_list=[1e-1, 5e-2, 1e-2, 5e-3, 1e-3, 5e-4, 1e-4, 5e-5, 1e-5, 0], 
+                 n_nodes_list=[5, 10, 20, 30, 40, 50], 
+                 n_sim=1, use_gpu=False, #sweep_n_nodes=False,
+                 new_gridsweep_2022=True,
                  late_s2=False, ratio_exp=0.75, simulated_annealing=False,
                  save_state=False, early_match=False):
     """Train n_simulations RNNs per set of conditions, for each set of conditions that are in arg"""
     assert (late_s2 and simulated_annealing) is False
-    assert (sweep_n_nodes and simulated_annealing) is False
+    # assert (sweep_n_nodes and simulated_annealing) is False
     assert (early_match and simulated_annealing) is False
     assert (early_match and late_s2) is False
     if use_gpu:
         torch.set_default_tensor_type(torch.cuda.FloatTensor)
-    if sweep_n_nodes:
-        assert len(train_task_list) == 1 and train_task_list[0] == 'pred_only'
+    # if sweep_n_nodes:
+    #     assert len(train_task_list) == 1 and train_task_list[0] == 'pred_only'
     # Data parameters dictionary
     d_dict = {'n_total': 1000,  # total number of data sequences
              'ratio_train': 0.8,
@@ -922,7 +926,7 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
 
     ## Set training parameters:
     t_dict = {}
-    t_dict['n_nodes'] = 20  # number of nodes in the RNN
+    # t_dict['n_nodes'] = 20  # number of nodes in the RNN
     t_dict['learning_rate'] = 0.002  # algorithm lr
     t_dict['bs'] = 1  # batch size
     if simulated_annealing:
@@ -937,31 +941,34 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
     exp_perc = int(d_dict['ratio_exp'] * 100)
     exp_str = f'{exp_perc}{100 - exp_perc}'
 
-    for sparsity in sparsity_list:
-        t_dict['l1_param'] = sparsity  # L1 regularisation in loss function
-        sci_not_spars = np.format_float_scientific(t_dict['l1_param'], precision=0)
-        sci_not_spars = sci_not_spars[0] + sci_not_spars[2:]  # skip dot
+    for n_nodes in tqdm(n_nodes_list):
+        t_dict['n_nodes'] = n_nodes  # number of nodes in the RNN
 
-        for nature_stim in nature_stim_list:
-            for type_task in type_task_list:
-                for train_task in train_task_list:
-                    if sweep_n_nodes:
-                        parent_folder = f'models/sweep_n_nodes/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
-                        if not os.path.exists(parent_folder):
-                            os.makedirs(parent_folder)
+        for sparsity in tqdm(sparsity_list):
+            t_dict['l1_param'] = sparsity  # L1 regularisation in loss function
+            sci_not_spars = np.format_float_scientific(t_dict['l1_param'], precision=0)
+            sci_not_spars = sci_not_spars[0] + sci_not_spars[2:]  # skip dot
+            print(f'N nodes: {n_nodes}, sparsity: {sparsity}')
+            for nature_stim in nature_stim_list:
+                for type_task in type_task_list:
+                    for train_task in train_task_list:
+                        # if sweep_n_nodes:
+                        #     parent_folder = f'models/sweep_n_nodes/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
+                        #     if not os.path.exists(parent_folder):
+                        #         os.makedirs(parent_folder)
 
-                        for n_nodes in [5, 10, 15, 20, 25]:
-                            child_folder = f'{n_nodes}_nodes/pred_only/'
-                            if not os.path.exists(parent_folder + child_folder):
-                                os.makedirs(parent_folder + child_folder)
+                        #     for n_nodes in [5, 10, 15, 20, 25]:
+                        #         child_folder = f'{n_nodes}_nodes/pred_only/'
+                        #         if not os.path.exists(parent_folder + child_folder):
+                        #             os.makedirs(parent_folder + child_folder)
 
-                            t_dict['n_nodes'] = n_nodes
-                            init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
-                                                save_folder=parent_folder + child_folder, use_gpu=use_gpu,
-                                                late_s2=late_s2, nature_stim=nature_stim, type_task=type_task,
-                                                train_task='pred_only', simulated_annealing=False, ratio_exp_array=None,
-                                                save_state=save_state)
-                    else:
+                        #         t_dict['n_nodes'] = n_nodes
+                        #         init_train_save_rnn(t_dict=t_dict, d_dict=d_dict, n_simulations=n_sim,
+                        #                             save_folder=parent_folder + child_folder, use_gpu=use_gpu,
+                        #                             late_s2=late_s2, nature_stim=nature_stim, type_task=type_task,
+                        #                             train_task='pred_only', simulated_annealing=False, ratio_exp_array=None,
+                        #                             save_state=save_state)
+                        # else:
                         if save_state:
                             mod_f = 'models/save_state'
                         else:
@@ -972,6 +979,8 @@ def summary_many(type_task_list=['dmc'], nature_stim_list=['onehot'],
                             parent_folder = f'{mod_f}/simulated_annealing/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
                         elif early_match:
                             parent_folder = f'{mod_f}/early_match/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
+                        elif new_gridsweep_2022:
+                            parent_folder = f'{mod_f}/new_gridsweep_2022/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/n_nodes_{n_nodes}/'
                         else:
                             parent_folder = f'{mod_f}/{exp_str}/{type_task}_task/{nature_stim}/sparsity_{sci_not_spars}/'
                         if not os.path.exists(parent_folder):
