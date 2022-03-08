@@ -316,13 +316,16 @@ def timestamp_min_date(rnn_name, date_min='2021-05-17', verbose=0):
             else:
                 return True
 
-def get_list_rnns(rnn_folder=''):
+def get_list_rnns(rnn_folder='',max_date_bool=True):
     """Get list of rnns in folder, and possibly take timestap into account"""
-    list_rnns = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data' and timestamp_max_date(rnn_name=x, date_max='2021-05-17')]
+    if max_date_bool:
+        list_rnns = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data' and timestamp_max_date(rnn_name=x, date_max='2021-05-17')]
+    else:
+        list_rnns = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data']
     return list_rnns
 
 def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=False,
-                           method='integral', verbose=0):
+                           method='integral', verbose=1, rnn_max_date_bool=True):
     """Compute learning index, meaning how well rnns converge. Do for all losses in list_loss.
     methods:
     integral: mean of all data points per rnn
@@ -333,7 +336,7 @@ def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=
     """
 
     assert normalise_start is False
-    list_rnns = get_list_rnns(rnn_folder=rnn_folder)
+    list_rnns = get_list_rnns(rnn_folder=rnn_folder, max_date_bool=rnn_max_date_bool)
     if verbose > 0:
         print(rnn_folder, len(list_rnns))
     # if len(list_rnns) > 20:
@@ -428,6 +431,66 @@ def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='
                             learn_eff_dict['setting'][i_conf] = suffix[1:]
                             learn_eff_dict['loss_comp'][i_conf] = loss_comp + suffix
                             i_conf += 1
+    learn_eff_df = pd.DataFrame(learn_eff_dict)
+    if i_conf > n_data:
+        assert False, 'dictionary was not large enough'
+    elif i_conf < n_data:
+        learn_eff_df = learn_eff_df[:i_conf]
+        print(f'Cutting of DF because of empty rows')
+    return learn_eff_df
+
+def calculate_all_learning_eff_indices_gridsweep(task_list=['dmc'], ratio_exp_str='7525',
+                                                nature_stim_list=['onehot'], method='final_loss',
+                                                sparsity_str_list = ['0e+00', '1e-05', '5e-05', '1e-04', '5e-04', '1e-03', '5e-03', '1e-02', '5e-02', '1e-01'],
+                                                n_nodes_list=['5', '10', '20', '30', '40', '50']):
+    """For each combination of conditions as given by input args, compute learning efficiency indeces
+    of each rnn and save everything in a df"""
+    n_sim = 15  # 10 should be enough but cutting off
+    n_loss_functions_per_sim = 2
+    n_data = len(task_list) * len(nature_stim_list) * len(sparsity_str_list) * len(n_nodes_list) * n_loss_functions_per_sim * n_sim
+    assert len(task_list) == 1 and len(nature_stim_list) == 1, 'for now list len have been set to 1'
+
+    learn_eff_dict = {**{x: np.zeros(n_data, dtype='object') for x in ['task', 'nature_stim', 'loss_comp', 'setting']},
+                      **{x: np.zeros(n_data) for x in ['learning_eff' ,'sparsity', 'n_nodes']}}
+
+    i_conf = 0
+    for i_task, task in enumerate(task_list):
+        for i_nat, nature_stim in enumerate(nature_stim_list):
+            for i_spars, sparsity_str in enumerate(sparsity_str_list):
+                for i_node, n_nodes_str in enumerate(n_nodes_list):
+                    n_nodes = int(n_nodes_str)
+                    spars = float(sparsity_str)
+                    base_folder = f'models/new_gridsweep_2022/{ratio_exp_str}/{task}_task/{nature_stim}/sparsity_{sparsity_str}/n_nodes_{n_nodes_str}/'
+                    if not os.path.exists(base_folder):
+                        # print(base_folder, 'does not exist', nature_stim)
+                        continue
+                    folders_dict = {}
+                    # folders_dict['pred_only'] = base_folder + 'pred_only/'
+                    folders_dict[f'{task}_only'] = base_folder + f'{task}_only/'
+                    folders_dict[f'pred_{task}'] = base_folder + f'pred_{task}/'
+                    for key, folder_rnns in folders_dict.items():
+                        list_keys = key.split('_')
+                        if 'only' in list_keys:
+                            list_keys.remove('only')
+                            suffix = '_single'
+                        else:
+                            suffix = '_multi'
+                        learn_eff = compute_learning_index(rnn_folder=folder_rnns,
+                                                            list_loss=list_keys,
+                                                            method=method,
+                                                            rnn_max_date_bool=False)
+                        for loss_comp in list_keys:
+                            for le in learn_eff[loss_comp]:
+                                learn_eff_dict['task'][i_conf] = task
+                                learn_eff_dict['nature_stim'][i_conf] = nature_stim
+                                learn_eff_dict['sparsity'][i_conf] = spars
+                                learn_eff_dict['n_nodes'][i_conf] = n_nodes
+                                # learn_eff_dict['mean_learning_eff'][i_conf] = np.mean(learn_eff[loss_comp])
+                                # learn_eff_dict['std_learning_eff'][i_conf] = np.std(learn_eff[loss_comp])
+                                learn_eff_dict['learning_eff'][i_conf] = le
+                                learn_eff_dict['setting'][i_conf] = suffix[1:]
+                                learn_eff_dict['loss_comp'][i_conf] = loss_comp + suffix
+                                i_conf += 1
     learn_eff_df = pd.DataFrame(learn_eff_dict)
     if i_conf > n_data:
         assert False, 'dictionary was not large enough'
