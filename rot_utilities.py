@@ -325,7 +325,7 @@ def get_list_rnns(rnn_folder='',max_date_bool=True):
     return list_rnns
 
 def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=False,
-                           method='integral', verbose=1, rnn_max_date_bool=True):
+                           method='integral', verbose=0, rnn_max_date_bool=True):
     """Compute learning index, meaning how well rnns converge. Do for all losses in list_loss.
     methods:
     integral: mean of all data points per rnn
@@ -451,7 +451,8 @@ def calculate_all_learning_eff_indices_gridsweep(task_list=['dmc'], ratio_exp_st
     assert len(task_list) == 1 and len(nature_stim_list) == 1, 'for now list len have been set to 1'
 
     learn_eff_dict = {**{x: np.zeros(n_data, dtype='object') for x in ['task', 'nature_stim', 'loss_comp', 'setting']},
-                      **{x: np.zeros(n_data) for x in ['learning_eff' ,'sparsity', 'n_nodes']}}
+                      **{x: np.zeros(n_data) for x in ['learning_eff' ,'sparsity']},
+                      **{x: np.zeros(n_data, dtype=int) for x in ['n_nodes']}}
 
     i_conf = 0
     for i_task, task in enumerate(task_list):

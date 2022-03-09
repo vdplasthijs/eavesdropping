@@ -555,32 +555,32 @@ def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_
         sparsity value
 
     """
-   base_folder = f'models/{ratio_exp_str}/{task}_task/{nature_stim}/sparsity_{sparsity_str}/'
-   # print('USING SAVED STATE')
-   folders_dict = {}
-   folders_dict['pred_only'] = base_folder + 'pred_only/'
-   folders_dict[f'{task}_only'] = base_folder + f'{task}_only/'
-   folders_dict[f'pred_{task}'] = base_folder + f'pred_{task}/'
-   # print(folders_dict)
-   plot_split_perf_custom(folder_pred=folders_dict['pred_only'],
+    base_folder = f'models/{ratio_exp_str}/{task}_task/{nature_stim}/sparsity_{sparsity_str}/'
+    # print('USING SAVED STATE')
+    folders_dict = {}
+    folders_dict['pred_only'] = base_folder + 'pred_only/'
+    folders_dict[f'{task}_only'] = base_folder + f'{task}_only/'
+    folders_dict[f'pred_{task}'] = base_folder + f'pred_{task}/'
+    # print(folders_dict)
+    plot_split_perf_custom(folder_pred=folders_dict['pred_only'],
                           folder_dmc=folders_dict[f'{task}_only'],
                           folder_dmcpred=folders_dict[f'pred_{task}'],
                           plot_std=plot_std, plot_indiv=plot_indiv,
                           task_type=task, ax=ax, plot_legend=plot_legend,
                           plot_pred=plot_pred, plot_spec=plot_spec)
-   if plot_title:
-       plt.title(task + r'$\; P(\alpha = \beta) = $' + f'0.{ratio_exp_str[:2]},' + r'$ \; \; \lambda=$' + f'{sparsity_str}');
+    if plot_title:
+        plt.title(task + r'$\; P(\alpha = \beta) = $' + f'0.{ratio_exp_str[:2]},' + r'$ \; \; \lambda=$' + f'{sparsity_str}');
 
-   if verbose > 0:
+    if verbose > 0:
 
-       for key, folder_rnns in folders_dict.items():
-           if os.path.exists(folder_rnns):
-               list_keys = key.split('_')
-               if 'only' in list_keys:
-                   list_keys.remove('only')
-               learn_eff = ru.compute_learning_index(rnn_folder=folder_rnns,
+        for key, folder_rnns in folders_dict.items():
+            if os.path.exists(folder_rnns):
+                list_keys = key.split('_')
+                if 'only' in list_keys:
+                    list_keys.remove('only')
+                learn_eff = ru.compute_learning_index(rnn_folder=folder_rnns,
                                                      list_loss=list_keys)
-               print(key, {x: (np.round(np.mean(learn_eff[x]), 4), np.round(np.std(learn_eff[x]), 4)) for x in list_keys})
+                print(key, {x: (np.round(np.mean(learn_eff[x]), 4), np.round(np.std(learn_eff[x]), 4)) for x in list_keys})
 
 def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, indicate_sparsity=False,
                              method='integral', nature_stim_list=['periodic', 'onehot'], ax=None,
@@ -684,6 +684,58 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
 
 
     return df
+
+def plot_learning_efficiency_matrix_sweep(learn_eff_df=None):
+    if learn_eff_df is None:
+        learn_eff_df = ru.calculate_all_learning_eff_indices_gridsweep()
+
+    ## Single match task;
+    tmp_df = learn_eff_df.drop(columns=['task', 'nature_stim', 'setting'])
+    tmp_df = tmp_df[tmp_df['loss_comp'] == 'dmc_single']
+
+    tmp_df = tmp_df.groupby(['loss_comp', 'sparsity', 'n_nodes']).mean()
+    tmp_df = tmp_df.reset_index()
+    tmp_mat_single = tmp_df.pivot(index='n_nodes', columns='sparsity', values='learning_eff')
+
+    ## Dual task;
+    tmp_df = learn_eff_df.drop(columns=['task', 'nature_stim', 'setting'])
+    tmp_df = tmp_df[tmp_df['loss_comp'] == 'dmc_multi']
+
+    tmp_df = tmp_df.groupby(['loss_comp', 'sparsity', 'n_nodes']).mean()
+    tmp_df = tmp_df.reset_index()
+    tmp_mat_multi = tmp_df.pivot(index='n_nodes', columns='sparsity', values='learning_eff')
+
+    # print(f'Overall min: {np.minimum(tmp_mat_single.min(), tmp_mat_multi.min())}')
+    tmp_mat_diff = tmp_mat_multi - tmp_mat_single
+
+    fig, ax = plt.subplots(1, 3, figsize=(12, 2.5), gridspec_kw={'wspace': 0.5})
+
+    vmin = 0.0
+    vmax = 1.2
+
+    sns.heatmap(data=tmp_mat_single, vmin=vmin, vmax=vmax, cmap='inferno',
+                ax=ax[0], cbar_kws={'label': 'Match Loss'})
+    ax[0].set_title('Single match task')
+
+
+    sns.heatmap(data=tmp_mat_multi, vmin=vmin, vmax=vmax, cmap='inferno',
+                ax=ax[1], cbar_kws={'label': 'Match Loss'})
+    ax[1].set_title('Dual task')
+
+
+    sns.heatmap(data=tmp_mat_diff, cbar_kws={'label': 'Loss Dual - Loss Single'},
+                ax=ax[2], cmap='PiYG', vmin=-1, vmax=1)
+    ax[2].set_title('Difference (dual - single)')
+
+
+    for i_plot in range(3):
+        bottom, top = ax[i_plot].get_ylim()
+        ax[i_plot].set_ylim(bottom + 0.5, top - 0.5)
+        ax[i_plot].invert_yaxis()
+        ax[i_plot].set_ylabel('Number of neurons')
+        ax[i_plot].set_xlabel('Sparsity parameter ' + r"$\lambda$")
+        ax[i_plot].set_yticklabels(ax[i_plot].get_yticklabels(), rotation=0)
+        
 
 def plot_bar_plot_all_tasks(ax=None, method='final_loss', save_fig=False):
     """Function that plots the bar plots showing the cumulative eavesdropping
