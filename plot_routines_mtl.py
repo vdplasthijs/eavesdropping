@@ -792,6 +792,60 @@ def plot_bar_plot_all_tasks(ax=None, method='final_loss', save_fig=False):
     if save_fig:
         plt.savefig('figures/nips/fig3_other-tasks_v2.pdf', bbox_inches='tight')
 
+
+def plot_bar_plot_all_tasks_splitup(ax=None, method='final_loss', save_fig=False):
+    """Function that plots the bar plots showing the cumulative eavesdropping
+    effect across sparsity values
+
+    """
+
+    if ax is None:
+        ax = plt.subplot(111)
+    task_nat_comb = (['dmc', 'onehot'], ['dms', 'onehot'], ['dmc', 'periodic'], 
+                     ['dms', 'periodic'], ['dmrc', 'periodic'], ['dmrs', 'periodic'])
+
+    bar_width = 0.4
+    bar_locs = np.arange(6)
+    single_arr, multi_arr = np.zeros(6), np.zeros(6)
+    i_single, i_multi = 0, 0
+    for i_cond, cond in enumerate(task_nat_comb):
+        task = cond[0]
+        nat = cond[1]
+        key = task + '_' + nat
+        df = ru.calculate_all_learning_eff_indices(method=method, task_list=[task],
+                                                    nature_stim_list=[nat])
+
+        tmp_df = df[[x[:4] != 'pred' for x in df['loss_comp']]].groupby(['task', 'nature_stim', 'setting','sparsity']).mean()  # compute mean for each set of conditions [ across simulations]
+        multi_rows = [True if x[2] == 'multi' else False for x in tmp_df.index]  # select multitask settings
+        tmp_df = tmp_df.groupby(['setting']).sum()  # sum by network type 
+        tmp_df = tmp_df.reset_index()
+
+        single_arr[i_single] = tmp_df[tmp_df['setting'] == 'single']['learning_eff']
+        i_single += 1
+        multi_arr[i_multi] = tmp_df[tmp_df['setting'] == 'multi']['learning_eff']
+        i_multi += 1
+    print(multi_arr, single_arr)
+    ax.bar(bar_locs - bar_width / 2, single_arr, width=bar_width,
+           label='single', color=spec_only_colour)
+    ax.bar(bar_locs + bar_width / 2, multi_arr, width=bar_width,
+           label='dual', color=pred_spec_colour)
+    ax.set_xlabel('Task complexity ' + r'$\to$', fontdict={'weight': 'bold'})
+    ax.set_ylabel('Cumulative loss across\nsparsity values')
+    ax.set_xticks(bar_locs )
+    ax.set_xticklabels(['DMC', 'DMS', '4 sample DMC', '4 sample DMS', '4 sample rotated DMC', '4 sample rotated DMS'], 
+                        rotation=30, ha='right')
+    ax.legend(frameon=False, loc='upper right', bbox_to_anchor=(1.15, 1.25))
+    ax.set_title('Eavesdropping effect decreases with\nincreasing match task complexity',
+                 fontdict={'weight': 'bold'}, loc='left')
+    ax.arrow(0.1, 7.365, 0, 2.465, head_width=0.1, head_length=0.4, linewidth=1.5,
+              color='k', length_includes_head=True)  
+    ax.arrow(0.1, 7.365, 0, -2.665, head_width=0.1, head_length=0.4, linewidth=1.5,
+              color='k', length_includes_head=True)  
+    ax.text(s='eavesdropping\neffect', x=0.2, y=7.4, fontdict={'rotation': 90, 'va': 'center', 'size': 10})
+    despine(ax)
+    if save_fig:
+        plt.savefig('figures/nips/fig3_other-tasks_v4.svg', bbox_inches='tight')
+
 def plot_sa_convergence(sa_folder_list=['/home/thijs/repos/rotation/models/simulated_annealing/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc'],
                         figsize=None, plot_std=True, plot_indiv=False):
     """Function plotting convergence of simulated annealing networks by plotting both
