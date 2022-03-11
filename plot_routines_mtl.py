@@ -814,9 +814,7 @@ def plot_bar_plot_all_tasks_splitup(ax=None, method='final_loss', save_fig=False
         key = task + '_' + nat
         df = ru.calculate_all_learning_eff_indices(method=method, task_list=[task],
                                                     nature_stim_list=[nat])
-
         tmp_df = df[[x[:4] != 'pred' for x in df['loss_comp']]].groupby(['task', 'nature_stim', 'setting','sparsity']).mean()  # compute mean for each set of conditions [ across simulations]
-        multi_rows = [True if x[2] == 'multi' else False for x in tmp_df.index]  # select multitask settings
         tmp_df = tmp_df.groupby(['setting']).sum()  # sum by network type 
         tmp_df = tmp_df.reset_index()
 
