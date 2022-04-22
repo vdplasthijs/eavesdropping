@@ -442,10 +442,10 @@ def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='
 def calculate_all_learning_eff_indices_gridsweep(task_list=['dmc'], ratio_exp_str='7525',
                                                 nature_stim_list=['onehot'], method='final_loss',
                                                 sparsity_str_list = ['0e+00', '1e-05', '5e-05', '1e-04', '5e-04', '1e-03', '5e-03', '1e-02', '5e-02', '1e-01'],
-                                                n_nodes_list=['5', '10', '20', '30', '40', '50']):
+                                                n_nodes_list=['5', '10', '20', '30', '40', '50', '75', '100']):
     """For each combination of conditions as given by input args, compute learning efficiency indeces
     of each rnn and save everything in a df"""
-    n_sim = 15  # 10 should be enough but cutting off
+    n_sim = 200  # 10 should be enough but cutting off
     n_loss_functions_per_sim = 2
     n_data = len(task_list) * len(nature_stim_list) * len(sparsity_str_list) * len(n_nodes_list) * n_loss_functions_per_sim * n_sim
     assert len(task_list) == 1 and len(nature_stim_list) == 1, 'for now list len have been set to 1'
@@ -589,13 +589,12 @@ def calculate_diff_activity(forw, representation='s1'):
     return plot_diff.T, labels_use_1, labels_use_2
 
 
-def inspect_sparsity_effect_weights(super_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot',
-                                    th_nz=0.1):
+def inspect_sparsity_effect_weights(super_folder='/home/tplas/repos/rotation/models/7525/dmc_task/onehot',
+                                    task_type = 'pred_dmc', th_nz=0.01):
     """Create mapping between sparsity value and real world value (eg number of nonzero)"""
     spars_folders = os.listdir(super_folder)
     # print(spars_folders)
     # return
-    task_type = 'pred_dmc'
     metric_list = ['L1', 'L2', 'number_nonzero']
     layer_names = ['lin_input', 'lin_feedback', 'lin_output']
     dict_layers = {x: {y: {} for y in spars_folders} for x in layer_names}
@@ -622,3 +621,22 @@ def inspect_sparsity_effect_weights(super_folder='/home/thijs/repos/rotation/mod
         ## save for this sparsity value
 
     return dict_layers
+
+def create_nonzero_mapping_df(type_task='dmc', nature_stim='onehot', th_nz=0.01):
+    if type_task == 'onehot':
+        assert 'r' not in nature_stim, 'this combination of task and nature_stim does not exist'
+
+    tmp = inspect_sparsity_effect_weights(th_nz=th_nz, task_type=f'pred_{type_task}',
+                        super_folder=f'/home/tplas/repos/rotation/models/7525/{type_task}_task/{nature_stim}')
+
+    spars_f_list = list(tmp['lin_feedback'].keys())
+    nz_array = np.zeros(len(spars_f_list))
+    spars_arr = np.zeros_like(nz_array)
+    for i_sf, sf in enumerate(spars_f_list):
+        mean_nz = np.mean(tmp['lin_feedback'][sf]['number_nonzero'])
+        spars_float = float(sf[-5:])
+        spars_arr[i_sf] = spars_float
+        nz_array[i_sf] = mean_nz
+    nz_dict = {'sparsity': spars_arr, 'number_nonzero': nz_array}
+    nz_df = pd.DataFrame(nz_dict)
+    return nz_df, nz_array, spars_arr
