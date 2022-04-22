@@ -387,7 +387,8 @@ def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=
 
 def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='7525',
                                        nature_stim_list=['onehot', 'periodic'], method='integral',
-                                       sparsity_str_list = ['0e+00', '1e-06', '5e-06', '1e-05', '5e-05', '1e-04', '5e-04', '1e-03', '5e-03', '1e-02', '5e-02', '1e-01']):
+                                       sparsity_str_list = ['0e+00', '1e-06', '5e-06', '1e-05', '5e-05', '1e-04', '5e-04', '1e-03', '5e-03', '1e-02', '5e-02', '1e-01'],
+                                       use_gridsweep_rnns=False, gridsweep_n_nodes='n_nodes_20'):
     """For each combination of conditions as given by input args, compute learning efficiency indeces
     of each rnn and save everything in a df"""
     n_sim = 200
@@ -402,7 +403,10 @@ def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='
         for i_nat, nature_stim in enumerate(nature_stim_list):
             for i_spars, sparsity_str in enumerate(sparsity_str_list):
                 spars = float(sparsity_str)
-                base_folder = f'models/{ratio_exp_str}/{task}_task/{nature_stim}/sparsity_{sparsity_str}/'
+                if use_gridsweep_rnns:
+                    base_folder = f'models/new_gridsweep_2022/{ratio_exp_str}/{task}_task/{nature_stim}/sparsity_{sparsity_str}/{gridsweep_n_nodes}/'
+                else:
+                    base_folder = f'models/{ratio_exp_str}/{task}_task/{nature_stim}/sparsity_{sparsity_str}/'
                 if not os.path.exists(base_folder):
                     # print(base_folder, 'does not exist', nature_stim)
                     continue
@@ -419,7 +423,8 @@ def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='
                         suffix = '_multi'
                     learn_eff = compute_learning_index(rnn_folder=folder_rnns,
                                                           list_loss=list_keys,
-                                                          method=method)
+                                                          method=method,
+                                                          rnn_max_date_bool=np.logical_not(use_gridsweep_rnns))
                     for loss_comp in list_keys:
                         for le in learn_eff[loss_comp]:
                             learn_eff_dict['task'][i_conf] = task
@@ -590,7 +595,8 @@ def calculate_diff_activity(forw, representation='s1'):
 
 
 def inspect_sparsity_effect_weights(super_folder='/home/tplas/repos/rotation/models/7525/dmc_task/onehot',
-                                    task_type = 'pred_dmc', th_nz=0.01):
+                                    task_type = 'pred_dmc', th_nz=0.01, 
+                                    use_gridsweep_rnns=False, gridsweep_n_nodes='n_nodes_20'):
     """Create mapping between sparsity value and real world value (eg number of nonzero)"""
     spars_folders = os.listdir(super_folder)
     # print(spars_folders)
@@ -599,9 +605,12 @@ def inspect_sparsity_effect_weights(super_folder='/home/tplas/repos/rotation/mod
     layer_names = ['lin_input', 'lin_feedback', 'lin_output']
     dict_layers = {x: {y: {} for y in spars_folders} for x in layer_names}
     for i_spars, spars_f in enumerate(spars_folders):
-        rnn_folder = os.path.join(super_folder, spars_f, task_type)
-        rnn_list = get_list_rnns(rnn_folder=rnn_folder)
-        # print(rnn_list)
+        if use_gridsweep_rnns:
+            rnn_folder = os.path.join(super_folder, spars_f, gridsweep_n_nodes, task_type)
+        else:
+            rnn_folder = os.path.join(super_folder, spars_f, task_type)
+        rnn_list = get_list_rnns(rnn_folder=rnn_folder, max_date_bool=np.logical_not(use_gridsweep_rnns))
+        # print(rnn_folder, rnn_list)
         n_rnns = len(rnn_list)
         for name_layer in layer_names:
             dict_layers[name_layer][spars_f] = {x: np.zeros(n_rnns) for x in metric_list}
@@ -622,12 +631,20 @@ def inspect_sparsity_effect_weights(super_folder='/home/tplas/repos/rotation/mod
 
     return dict_layers
 
-def create_nonzero_mapping_df(type_task='dmc', nature_stim='onehot', th_nz=0.01):
+def create_nonzero_mapping_df(type_task='dmc', nature_stim='onehot', th_nz=0.01,
+                              use_gridsweep_rnns=False, gridsweep_n_nodes='n_nodes_20'):
     if type_task == 'onehot':
         assert 'r' not in nature_stim, 'this combination of task and nature_stim does not exist'
 
+    if use_gridsweep_rnns:
+        base_folder = f'models/new_gridsweep_2022/7525/{type_task}_task/{nature_stim}/'
+    else:
+        base_folder = f'models/7525/{type_task}_task/{nature_stim}/'
+    
+
     tmp = inspect_sparsity_effect_weights(th_nz=th_nz, task_type=f'pred_{type_task}',
-                        super_folder=f'/home/tplas/repos/rotation/models/7525/{type_task}_task/{nature_stim}')
+                        super_folder=base_folder, use_gridsweep_rnns=use_gridsweep_rnns, 
+                        gridsweep_n_nodes=gridsweep_n_nodes)
 
     spars_f_list = list(tmp['lin_feedback'].keys())
     nz_array = np.zeros(len(spars_f_list))

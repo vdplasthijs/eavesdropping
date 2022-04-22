@@ -46,7 +46,7 @@ def set_fontsize(font_size=12):
         new fontsie .
     """
     plt.rcParams['font.size'] = font_size
-    plt.rcParams['axes.autolimit_mode'] = 'data' # default: 'data'
+    plt.rcParams['axes.autolimit_mode'] = 'data'  # default: 'data'
     params = {'legend.fontsize': font_size,
              'axes.labelsize': font_size,
              'axes.titlesize': font_size,
@@ -65,6 +65,15 @@ def despine(ax):
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     return ax
+
+def naked(ax):
+    for ax_name in ['top', 'bottom', 'right', 'left']:
+        ax.spines[ax_name].set_visible(False)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_xlabel('')
+    ax.set_ylabel('')
+
 
 def opt_leaf(w_mat, dim=0):
     '''create optimal leaf order over dim, of matrix w_mat. if w_mat is not an
@@ -585,7 +594,7 @@ def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_
 def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, indicate_sparsity=False,
                              method='integral', nature_stim_list=['periodic', 'onehot'], ax=None,
                              plot_custom_legend=False, plot_title=False, leg_anchor=(0, 1.05), leg_cols=2,
-                             new_x_axis_df=None):
+                             new_x_axis_df=None, use_gridsweep_rnns=False, gridsweep_n_nodes='n_nodes_20'):
     """Function that plots eavesdropping effect as a function of sparsity. Either plot
     both STL and MTl, or plot difference between these two. Can take multiple tasks and nature-stim
 
@@ -601,7 +610,9 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
 
     """
     df = ru.calculate_all_learning_eff_indices(method=method, task_list=task_list,
-                                                nature_stim_list=nature_stim_list)
+                                                nature_stim_list=nature_stim_list,
+                                                use_gridsweep_rnns=use_gridsweep_rnns,
+                                                gridsweep_n_nodes=gridsweep_n_nodes)
     # assert len(task_list) == 2
     if ax is None:
         fig, ax = plt.subplots(1, len(nature_stim_list), figsize=(6 * len(nature_stim_list), 3), gridspec_kw={'wspace': 0.7})
@@ -610,6 +621,10 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
 
     colour_dict = {'single': spec_only_colour,
                   'multi': pred_spec_colour}
+    if use_gridsweep_rnns:
+        alpha_line = np.power(int(gridsweep_n_nodes.split('_')[-1]) / 100, 0.67)
+    else:
+        alpha_line = 1
     i_plot = 0
     if plot_difference:
         tmp_df = df[[x[:4] != 'pred' for x in df['loss_comp']]].groupby(['task', 'nature_stim', 'setting','sparsity']).mean()  # compute mean for each set of conditions [ across simulations]
@@ -626,8 +641,9 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
             xaxis_name = 'sparsity'
         for i_nat, nat in enumerate(nature_stim_list):
             sns.lineplot(data=tmp_df[tmp_df['nature_stim'] == nat], x=xaxis_name, y='learning_eff',
-                         style='task', ax=ax[i_plot], color='k', linewidth=3,
-                         markers=True,  err_kws={'alpha':0.1}, label='Difference')
+                         style='task', ax=ax[i_plot], color='k', linewidth=3, 
+                         markers=True,  err_kws={'alpha':0.1}, label='Difference',
+                         **{'alpha': alpha_line})
             i_plot += 1
     else:
         spec_task_df = df[[x.split('_')[0] in task_list for x in df['loss_comp']]]
@@ -641,7 +657,7 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
             sns.lineplot(data=spec_task_df[spec_task_df['nature_stim'] == nat], x=xaxis_name, y='learning_eff',
                          hue='setting', style='task', markers=True, ci=95, linewidth=1.5,
                          ax=ax[i_plot], hue_order=['multi', 'single'], palette=colour_dict,
-                         err_kws={'alpha':0.1}, **{'alpha': 0.5})
+                         err_kws={'alpha': 0.1}, **{'alpha': alpha_line})
             i_plot += 1
     for i_plot in range(len(ax)):
         if len(nature_stim_list) > 1:
@@ -676,6 +692,7 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
             ax[i_plot].set_ylabel('Final loss of\nmatching task')
 
         if plot_custom_legend:
+            print('zep')
             custom_lines = [matplotlib.lines.Line2D([0], [0], color=colour_dict['single'], lw=1.5),
                             matplotlib.lines.Line2D([0], [0], color=colour_dict['multi'], lw=1.5),
                             matplotlib.lines.Line2D([0], [0], color='k', lw=3)]
