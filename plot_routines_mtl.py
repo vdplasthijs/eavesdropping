@@ -247,7 +247,9 @@ def len_data_files(dir_path):
 
 def plot_split_perf_custom(folder_pred=None, folder_dmcpred=None, folder_dmc=None, ax=None,
                            plot_legend=True, legend_anchor=(1, 1), task_type='dmc',
-                           plot_std=True, plot_indiv=False, plot_pred=True, plot_spec=True):
+                           plot_std=True, plot_indiv=False, plot_pred=True, plot_spec=True,
+                           pred_only_colour=pred_only_colour, spec_only_colour=spec_only_colour,
+                           pred_spec_colour=pred_spec_colour, linestyle_predspec_spec='-'):
     """Function that plots pred loss and spec loss for pred only, spec only and combined rnns .
 
     Parameters
@@ -294,7 +296,7 @@ def plot_split_perf_custom(folder_pred=None, folder_dmcpred=None, folder_dmc=Non
             list_top.append(task_type)
 
         _ = plot_split_perf(rnn_folder=folder_dmcpred, list_top=list_top, lw=5,
-                            linestyle_custom_dict={'pred': '--', task_type: '-'},
+                            linestyle_custom_dict={'pred': '--', task_type: linestyle_predspec_spec},
                             colour_custom_dict={'pred': pred_spec_colour, task_type: pred_spec_colour},
                             plot_std=plot_std, plot_indiv=plot_indiv,
                             ax_top=ax, ax_bottom=None, plot_bottom=False,
@@ -907,6 +909,50 @@ def plot_sa_convergence(sa_folder_list=['/home/thijs/repos/rotation/models/simul
     if len(sa_folder_list) == 2:
         ax_ratio[1].set_title('Whereas tasks with a constant ' + r'$\mathbf{P(\alpha = \beta) = 0.5}$' + ' do not\nlearn to solve the task',
                                 fontdict={'weight': 'bold'}, loc='left')
+    return fig
+
+
+def plot_sa_convergence_small(sa_folder_list=['/home/thijs/repos/rotation/models/simulated_annealing/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc'],
+                        figsize=None, plot_std=True, plot_indiv=False, color_list=[pred_spec_colour, '#6ecba6ff']):
+    """Function plotting convergence of simulated annealing networks by plotting both
+    ratio_expected-array and loss function, for the foldres given in the list .
+    """
+    if figsize is None:
+        figsize = (4, 3)
+    fig = plt.figure(constrained_layout=False, figsize=figsize)
+    gs_conv = fig.add_gridspec(ncols=1, nrows=1, bottom=0, top=0.75, left=0, right=1, wspace=0.3)
+    gs_ratio = fig.add_gridspec(ncols=1, nrows=1, bottom=0.85, top=1, left=0, right=1, wspace=0.3)
+
+    ax_conv = fig.add_subplot(gs_conv[0])
+    ax_ratio = fig.add_subplot(gs_ratio[0])
+    ratio_exp_array = {}
+    for i_col, sa_folder in enumerate(sa_folder_list):
+        list_rnns = ru.get_list_rnns(rnn_folder=sa_folder)
+        for i_rnn, rnn_name in enumerate(list_rnns):
+            rnn = ru.load_rnn(os.path.join(sa_folder, rnn_name))
+            assert rnn.info_dict['simulated_annealing']
+            if i_rnn == 0:
+                ratio_exp_array[i_col] = rnn.info_dict['ratio_exp_array']
+            else:
+                assert (ratio_exp_array[i_col] == rnn.info_dict['ratio_exp_array']).all()
+
+        plot_split_perf_custom(folder_pred=None,
+                               folder_dmc=None,
+                               folder_dmcpred=sa_folder,
+                               plot_std=plot_std, plot_indiv=plot_indiv,
+                               task_type='dmc', ax=ax_conv, plot_legend=False,
+                               plot_pred=False, plot_spec=True,
+                               pred_spec_colour=color_list[i_col],
+                               linestyle_predspec_spec=('-' if i_col == 0 else '--'))
+        ax_ratio.plot(ratio_exp_array[i_col], linewidth=3, linestyle=('-' if i_col == 0 else '--'), c=color_list[i_col])
+    ax_ratio.set_xticklabels([])
+    ax_ratio.set_ylim([0.45, 0.85])
+    ax_conv.set_ylabel('Final loss')
+    despine(ax_ratio)
+    ax_ratio.set_ylabel(r'$P(\alpha = \beta)$');
+    fig.align_ylabels(axs=[ax_ratio, ax_conv])
+    ax_ratio.set_title('Simulated annealing of stimulus predictability\n' + r'$\mathbf{P(\alpha = \beta)}$' + ' enables RNNs to learn the matching task',# with ' + r'$\mathbf{P(\alpha = \beta) = 0.5}$',
+                            fontdict={'weight': 'bold'}, loc='left')
     return fig
 
 def plot_autotemp_s1_decoding(parent_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/',
