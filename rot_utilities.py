@@ -368,6 +368,7 @@ def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=
             learn_eff[key] = np.zeros(mat.shape[0]) + np.mean(np.mean(mat, 1))
         elif method == 'final_loss':
             learn_eff[key] = np.mean(mat[:, -5:], 1)
+            # learn_eff[key] = np.mean(mat[:, :5], 1)
         elif method == 'half_time':
             half_time_ar = np.zeros(mat.shape[0])
             for i_rnn in range(mat.shape[0]):
@@ -388,7 +389,8 @@ def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=
 def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='7525',
                                        nature_stim_list=['onehot', 'periodic'], method='integral',
                                        sparsity_str_list = ['0e+00', '1e-06', '5e-06', '1e-05', '5e-05', '1e-04', '5e-04', '1e-03', '5e-03', '1e-02', '5e-02', '1e-01'],
-                                       use_gridsweep_rnns=False, gridsweep_n_nodes='n_nodes_20'):
+                                       use_gridsweep_rnns=False, gridsweep_n_nodes='n_nodes_20',
+                                       eval_pred_loss_only=False):
     """For each combination of conditions as given by input args, compute learning efficiency indeces
     of each rnn and save everything in a df"""
     n_sim = 200
@@ -411,8 +413,9 @@ def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='
                     # print(base_folder, 'does not exist', nature_stim)
                     continue
                 folders_dict = {}
-                # folders_dict['pred_only'] = base_folder + 'pred_only/'
-                folders_dict[f'{task}_only'] = base_folder + f'{task}_only/'
+                folders_dict['pred_only'] = base_folder + 'pred_only/'
+                if eval_pred_loss_only is False:
+                    folders_dict[f'{task}_only'] = base_folder + f'{task}_only/'
                 folders_dict[f'pred_{task}'] = base_folder + f'pred_{task}/'  # only select this one if you want to check how pred went in combined taks
                 for key, folder_rnns in folders_dict.items():
                     list_keys = key.split('_')
@@ -421,7 +424,8 @@ def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='
                         suffix = '_single'
                     else:
                         suffix = '_multi'
-                    # list_keys = ['pred']  # set this one if you want check how pred went
+                    if eval_pred_loss_only:  # overwrite and only eval prediction loss. (this way we still get the correct suffix from lines above)
+                        list_keys = ['pred']  # set this one if you want check how pred went
                     learn_eff = compute_learning_index(rnn_folder=folder_rnns,
                                                           list_loss=list_keys,
                                                           method=method,

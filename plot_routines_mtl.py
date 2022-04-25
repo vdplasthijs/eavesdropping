@@ -107,7 +107,7 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
                     label_dict_keys = {x: x for x in ['dmc', 'dms', 'pred', 'S2', 'G', 'G1', 'G2',
                                                             '0', '0_postS1', '0_postS2', '0_postG']},
                     linestyle_custom_dict={}, colour_custom_dict={},
-                    plot_std=True, plot_indiv=False):
+                    plot_std=True, plot_indiv=False, max_date_bool=True):
     """Function that plots the performance (after convergence), split by loss function.
     Can take single RNN or folder of RNNs.
 
@@ -161,7 +161,7 @@ def plot_split_perf(rnn_name=None, rnn_folder=None, ax_top=None, ax_bottom=None,
             print('EARLY MATCH CORRECTED LIST DIR')
             list_rnns = os.listdir(rnn_folder)
         else:
-            list_rnns = ru.get_list_rnns(rnn_folder=rnn_folder)
+            list_rnns = ru.get_list_rnns(rnn_folder=rnn_folder, max_date_bool=max_date_bool)
 
     ## Get loss function per RNN
     n_rnn = len(list_rnns)
@@ -596,7 +596,8 @@ def plot_effect_eavesdropping_learning(task='dmc', ratio_exp_str='7525', nature_
 def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, indicate_sparsity=False,
                              method='integral', nature_stim_list=['periodic', 'onehot'], ax=None,
                              plot_custom_legend=False, plot_title=False, leg_anchor=(0, 1.05), leg_cols=2,
-                             new_x_axis_df=None, use_gridsweep_rnns=False, gridsweep_n_nodes='n_nodes_20'):
+                             new_x_axis_df=None, use_gridsweep_rnns=False, gridsweep_n_nodes='n_nodes_20',
+                             plot_pred_only=False):
     """Function that plots eavesdropping effect as a function of sparsity. Either plot
     both STL and MTl, or plot difference between these two. Can take multiple tasks and nature-stim
 
@@ -614,15 +615,23 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
     df = ru.calculate_all_learning_eff_indices(method=method, task_list=task_list,
                                                 nature_stim_list=nature_stim_list,
                                                 use_gridsweep_rnns=use_gridsweep_rnns,
-                                                gridsweep_n_nodes=gridsweep_n_nodes)
-    # assert len(task_list) == 2
+                                                gridsweep_n_nodes=gridsweep_n_nodes,
+                                                eval_pred_loss_only=plot_pred_only)
+    if plot_pred_only:
+        assert plot_difference is False
+        task_list = ['pred']  # change for plotting
+        colour_dict = {'single': pred_only_colour,
+                       'multi': pred_spec_colour}
+    else:
+        colour_dict = {'single': spec_only_colour,
+                       'multi': pred_spec_colour}
     if ax is None:
         fig, ax = plt.subplots(1, len(nature_stim_list), figsize=(6 * len(nature_stim_list), 3), gridspec_kw={'wspace': 0.7})
     if len(nature_stim_list) == 1:
         ax = [ax]
-
-    colour_dict = {'single': spec_only_colour,
-                  'multi': pred_spec_colour}
+    # if plot_pred_only:
+    #     colour_dict = {'pred'}    
+    # else:
     if use_gridsweep_rnns:
         alpha_line = np.power(int(gridsweep_n_nodes.split('_')[-1]) / 100, 0.67)
     else:
@@ -656,8 +665,9 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
         else:
             xaxis_name = 'sparsity'
         for i_nat, nat in enumerate(nature_stim_list):
+            # print(spec_task_df)
             sns.lineplot(data=spec_task_df[spec_task_df['nature_stim'] == nat], x=xaxis_name, y='learning_eff',
-                         hue='setting', style='task', markers=True, ci=95, linewidth=1.5,
+                         hue='setting', markers=True, ci=95, linewidth=1.5, style='loss_comp',
                          ax=ax[i_plot], hue_order=['multi', 'single'], palette=colour_dict,
                          err_kws={'alpha': 0.1}, **{'alpha': alpha_line})
             i_plot += 1
@@ -694,14 +704,18 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
             ax[i_plot].set_ylabel('Final loss of\nmatching task')
 
         if plot_custom_legend:
-            print('zep')
-            custom_lines = [matplotlib.lines.Line2D([0], [0], color=colour_dict['single'], lw=1.5),
-                            matplotlib.lines.Line2D([0], [0], color=colour_dict['multi'], lw=1.5),
-                            matplotlib.lines.Line2D([0], [0], color='k', lw=3)]
-            ax[i_plot].legend(custom_lines, ['single', 'dual', 'difference'], frameon=False,
-                              loc='upper left', bbox_to_anchor=leg_anchor, ncol=leg_cols)
-
-
+            if plot_pred_only:
+                custom_lines = [matplotlib.lines.Line2D([0], [0], color=colour_dict['single'], lw=1.5),
+                                matplotlib.lines.Line2D([0], [0], color=colour_dict['multi'], lw=1.5, linestyle='--'),
+                                matplotlib.lines.Line2D([0], [0], color='k', lw=1)]
+                ax[i_plot].legend(custom_lines, ['single', 'dual', 'optimal'], frameon=False,
+                                loc='upper left', bbox_to_anchor=leg_anchor, ncol=3)
+            else:
+                custom_lines = [matplotlib.lines.Line2D([0], [0], color=colour_dict['single'], lw=1.5),
+                                matplotlib.lines.Line2D([0], [0], color=colour_dict['multi'], lw=1.5),
+                                matplotlib.lines.Line2D([0], [0], color='k', lw=3)]
+                ax[i_plot].legend(custom_lines, ['single', 'dual', 'difference'], frameon=False,
+                                loc='upper left', bbox_to_anchor=leg_anchor, ncol=leg_cols)
     return df
 
 def plot_learning_efficiency_matrix_sweep(learn_eff_df=None):
