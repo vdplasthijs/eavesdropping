@@ -707,7 +707,7 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
             if plot_pred_only:
                 custom_lines = [matplotlib.lines.Line2D([0], [0], color=colour_dict['single'], lw=1.5),
                                 matplotlib.lines.Line2D([0], [0], color=colour_dict['multi'], lw=1.5, linestyle='--'),
-                                matplotlib.lines.Line2D([0], [0], color='k', lw=1)]
+                                matplotlib.lines.Line2D([0], [0], color='k', lw=1.5)]
                 ax[i_plot].legend(custom_lines, ['single', 'dual', 'optimal'], frameon=False,
                                 loc='upper left', bbox_to_anchor=leg_anchor, ncol=3)
             else:
