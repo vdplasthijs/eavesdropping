@@ -351,7 +351,7 @@ def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=
         else:
             assert rnn.info_dict['n_epochs'] == n_epochs, 'number of epochs not equal, this is not implemented explicitly when computing the integral'
         for key in list_loss:
-            assert key in rnn.test_loss_split.keys(), f'{key} not saved for {rnn}'
+            assert key in rnn.test_loss_split.keys(), f'{key} not saved for {rnn}. List of saved loss names: {rnn.test_loss_split.keys()}'
             arr = rnn.test_loss_split[key]
             conv_dict[key][i_rnn, :] = arr.copy()
     learn_eff = {}
@@ -413,7 +413,7 @@ def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='
                 folders_dict = {}
                 # folders_dict['pred_only'] = base_folder + 'pred_only/'
                 folders_dict[f'{task}_only'] = base_folder + f'{task}_only/'
-                folders_dict[f'pred_{task}'] = base_folder + f'pred_{task}/'
+                folders_dict[f'pred_{task}'] = base_folder + f'pred_{task}/'  # only select this one if you want to check how pred went in combined taks
                 for key, folder_rnns in folders_dict.items():
                     list_keys = key.split('_')
                     if 'only' in list_keys:
@@ -421,6 +421,7 @@ def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='
                         suffix = '_single'
                     else:
                         suffix = '_multi'
+                    # list_keys = ['pred']  # set this one if you want check how pred went
                     learn_eff = compute_learning_index(rnn_folder=folder_rnns,
                                                           list_loss=list_keys,
                                                           method=method,
