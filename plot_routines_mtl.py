@@ -667,7 +667,7 @@ def plot_learning_efficiency(task_list=['dms', 'dmc'], plot_difference=False, in
         for i_nat, nat in enumerate(nature_stim_list):
             # print(spec_task_df)
             sns.lineplot(data=spec_task_df[spec_task_df['nature_stim'] == nat], x=xaxis_name, y='learning_eff',
-                         hue='setting', markers=True, ci=95, linewidth=1.5, style='loss_comp',
+                         hue='setting', markers=True, ci=95, linewidth=1.5, style='loss_comp' if plot_pred_only else 'task',
                          ax=ax[i_plot], hue_order=['multi', 'single'], palette=colour_dict,
                          err_kws={'alpha': 0.1}, **{'alpha': alpha_line})
             i_plot += 1
