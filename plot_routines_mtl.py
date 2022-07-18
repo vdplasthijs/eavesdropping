@@ -456,26 +456,17 @@ def plot_stl_mtl_comparison(dmc_only_folder='/home/tplas/repos/eavesdropping/mod
     sns.pointplot(data=learn_eff_df, x='network_task', y='learning_index', ax=ax, color='k', join=False)
     p_val = scipy.stats.wilcoxon(dict_stl['dmc'], dict_mtl['dmc'],
                                        alternative='two-sided')[1]
+    print(p_val, 'mtl stl')
     xlim = ax.get_xlim()
     ylim = ax.get_ylim()
     ax.plot([0.2, 0.8], [0.6, 0.6], c='k')
     if p_val < 0.01:
-        if str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '4':
-            ax.text(s='P < 10$^{-3}$', x=0.2, y=0.63)
-        elif str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '3':
-            ax.text(s='P < 10$^{-2}$', x=0.2, y=0.63)
-        elif str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '6':
-            ax.text(s='P < 10$^{-5}$', x=0.2, y=0.63)
-        elif str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '5':
-            ax.text(s='P < 10$^{-4}$', x=0.2, y=0.63)
-        else:
-            assert False, f'p value is {p_val}, or {ru.two_digit_sci_not(p_val)[-2:]}'
+        ax.text(s=f'P < 10^-{str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1)}', x=0.2, y=0.63)
     else:
         ax.text(s=f'n.s.', x=0.4, y=0.63)
     ax.set_xlim(xlim)
     # ax.set_ylim(ylim)
     ax.set_ylim([-0.05, 1.6])
-    print(p_val, 'mtl stl')
     ax.set_xlabel('Learning paradigms')
     if method == 'integral':
         ax.set_ylabel('Speed of convergence of\nmatching task')
@@ -509,19 +500,11 @@ def plot_7525_5050_comparison(folder_50='/home/tplas/repos/eavesdropping/models/
     ylim = ax.get_ylim()
     ax.plot([0.2, 0.8], [0.6, 0.6], c='k')
     if p_val < 0.01:
-        if str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '4':
-            ax.text(s='P < 10$^{-4}$', x=0.2, y=0.63)
-        elif str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '3':
-            ax.text(s='P < 10$^{-3}$', x=0.2, y=0.63)
-        elif str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '2':
-            ax.text(s='P < 10$^{-2}$', x=0.2, y=0.63)
-        else:
-            assert False
+        ax.text(s=f'P < 10^-{str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1)}', x=0.2, y=0.63)
     else:
         ax.text(s=f'n.s.', x=0.4, y=0.63)
     ax.set_xlim(xlim)
     ax.set_ylim([-0.05, 1.6])
-    print(p_val, 'mtl stl')
     # ax.set_xlabel('Ratio ' + r"$\alpha$" + '/' + r"$\beta$")
     ax.set_xlabel(r'$P(\alpha = \beta)$')
     if method == 'integral':

@@ -387,6 +387,9 @@ def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=
         else:
             assert False, f'Method {method} not implemented!'
         assert len(learn_eff[key]) == len(list_rnns)
+
+    # if verbose > 0:
+    #     print([(k, len(v)) for k, v in learn_eff.items()])
     return learn_eff
 
 def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='7525',
