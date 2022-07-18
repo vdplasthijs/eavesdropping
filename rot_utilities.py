@@ -316,8 +316,11 @@ def timestamp_min_date(rnn_name, date_min='2021-05-17', verbose=0):
             else:
                 return True
 
-def get_list_rnns(rnn_folder='',max_date_bool=True):
-    """Get list of rnns in folder, and possibly take timestap into account"""
+def get_list_rnns(rnn_folder='',max_date_bool=True, verbose=0):
+    """Get list of rnns in folder, and possibly take timestamp into account"""
+    if verbose:
+        print(f'get list rnns max date is {max_date_bool}')
+        print(f'Folder is {rnn_folder}')
     if max_date_bool:
         list_rnns = [x for x in os.listdir(rnn_folder) if x[-5:] == '.data' and timestamp_max_date(rnn_name=x, date_max='2021-05-17')]
     else:
@@ -334,15 +337,15 @@ def compute_learning_index(rnn_folder=None, list_loss=['pred'], normalise_start=
     half_time: time for which np.diff is smallest (ie greatest negative)
     agrmin_gradient:  same but with np.gradient
     """
-
     assert normalise_start is False
     list_rnns = get_list_rnns(rnn_folder=rnn_folder, max_date_bool=rnn_max_date_bool)
     if verbose > 0:
-        print(rnn_folder, len(list_rnns))
+        print(rnn_folder, len(list_rnns), list_loss)
     # if len(list_rnns) > 20:
     #     list_rnns = list_rnns[:20]
     #     print(f'list rnns shortened for {rnn_folder}')
     n_rnn = len(list_rnns)
+    assert n_rnn > 0, 'list of rnns is empty'
     for i_rnn, rnn_name in enumerate(list_rnns):
         rnn = load_rnn(os.path.join(rnn_folder, rnn_name))
         if i_rnn == 0:
@@ -413,7 +416,8 @@ def calculate_all_learning_eff_indices(task_list=['dmc', 'dms'], ratio_exp_str='
                     # print(base_folder, 'does not exist', nature_stim)
                     continue
                 folders_dict = {}
-                folders_dict['pred_only'] = base_folder + 'pred_only/'
+                if use_gridsweep_rnns is False:  # gridsweep doesn't have pred_only
+                    folders_dict['pred_only'] = base_folder + 'pred_only/'
                 if eval_pred_loss_only is False:
                     folders_dict[f'{task}_only'] = base_folder + f'{task}_only/'
                 folders_dict[f'pred_{task}'] = base_folder + f'pred_{task}/'  # only select this one if you want to check how pred went in combined taks
@@ -516,7 +520,7 @@ def two_digit_sci_not(x):
     sci_not_spars = sci_not_spars[0] + sci_not_spars[2:]  # skip dot
     return sci_not_spars
 
-def count_datasets_sparsity_sweep(super_folder='/home/thijs/repos/rotation/models/7525'):
+def count_datasets_sparsity_sweep(super_folder='/home/tplas/repos/eavesdropping/models/7525'):
     """Count number of network simulation per condition"""
     task_folders = os.listdir(super_folder)
     task_nat_folder_dict = {}
@@ -599,7 +603,7 @@ def calculate_diff_activity(forw, representation='s1'):
     return plot_diff.T, labels_use_1, labels_use_2
 
 
-def inspect_sparsity_effect_weights(super_folder='/home/tplas/repos/rotation/models/7525/dmc_task/onehot',
+def inspect_sparsity_effect_weights(super_folder='/home/tplas/repos/eavesdropping/models/7525/dmc_task/onehot',
                                     task_type = 'pred_dmc', th_nz=0.01, 
                                     use_gridsweep_rnns=False, gridsweep_n_nodes='n_nodes_20'):
     """Create mapping between sparsity value and real world value (eg number of nonzero)"""

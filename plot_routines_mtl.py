@@ -315,7 +315,7 @@ def plot_split_perf_custom(folder_pred=None, folder_dmcpred=None, folder_dmc=Non
         ax.set_ylim([-0.05, 1.5])
     return ax
 
-def plot_n_nodes_convergence(parent_folder='/home/thijs/repos/rotation/models/sweep_n_nodes/7525/dmc_task/onehot/sparsity_5e-03/',
+def plot_n_nodes_convergence(parent_folder='/home/tplas/repos/eavesdropping/models/sweep_n_nodes/7525/dmc_task/onehot/sparsity_5e-03/',
                    plot_legend=True, ax=None, plot_std=True, plot_indiv=False):
     """Function that plots convergence of rnns depending on n nodes
     """
@@ -336,7 +336,7 @@ def plot_n_nodes_convergence(parent_folder='/home/thijs/repos/rotation/models/sw
     ax.spines['top'].set_visible(False)
     ax.set_ylim([-0.05, 1.05])
 
-def plot_n_nodes_sweep(parent_folder='/home/thijs/repos/rotation/models/sweep_n_nodes/7525/dmc_task/onehot/sparsity_1e-03/',
+def plot_n_nodes_sweep(parent_folder='/home/tplas/repos/eavesdropping/models/sweep_n_nodes/7525/dmc_task/onehot/sparsity_1e-03/',
                   verbose=0, ax=None, method='integral', color='k', print_labels=True):
     """Function that plots performance per number of nodes
 
@@ -370,7 +370,7 @@ def plot_n_nodes_sweep(parent_folder='/home/thijs/repos/rotation/models/sweep_n_
         ax.set_title('Optimal network size\nfor various sparsity values', loc='left', fontdict={'weight': 'bold'})
         ax = despine(ax)
 
-def plot_n_nodes_sweep_multiple(super_folder='/home/thijs/repos/rotation/models/sweep_n_nodes/7525/dmc_task/onehot',
+def plot_n_nodes_sweep_multiple(super_folder='/home/tplas/repos/eavesdropping/models/sweep_n_nodes/7525/dmc_task/onehot',
                                 ax=None, method='integral'):
     """Function that plots n nodes sweep for multiple sparsity values
 
@@ -397,8 +397,8 @@ def plot_n_nodes_sweep_multiple(super_folder='/home/thijs/repos/rotation/models/
               color='k', length_includes_head=True)
     ax.text(s='sparsity', x=4.55, y=0.63, rotation=90, fontsize=12)
 
-def plot_late_s2_comparison(late_s2_folder='/home/thijs/repos/rotation/models/late_s2/7525/dmc_task/onehot/sparsity_1e-03/pred_only',
-                            early_s2_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/pred_only',
+def plot_late_s2_comparison(late_s2_folder='/home/tplas/repos/eavesdropping/models/late_s2/7525/dmc_task/onehot/sparsity_1e-03/pred_only',
+                            early_s2_folder='/home/tplas/repos/eavesdropping/models/7525/dmc_task/onehot/sparsity_1e-03/pred_only',
                             method='integral', ax=None):
     """Function plotting pointplot of regular (early) s2 performance and late s2 performance.
     """
@@ -437,8 +437,8 @@ def plot_late_s2_comparison(late_s2_folder='/home/thijs/repos/rotation/models/la
     ax = despine(ax)
     ax.set_ylim()
 
-def plot_stl_mtl_comparison(dmc_only_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/dmc_only/',
-                            pred_dmc_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
+def plot_stl_mtl_comparison(dmc_only_folder='/home/tplas/repos/eavesdropping/models/7525/dmc_task/onehot/sparsity_1e-03/dmc_only/',
+                            pred_dmc_folder='/home/tplas/repos/eavesdropping/models/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
                             method='integral', ax=None):
     """Function that quantifies eavesdropping effect (between STL and MTL networks )"""
     if ax is None:
@@ -461,11 +461,15 @@ def plot_stl_mtl_comparison(dmc_only_folder='/home/thijs/repos/rotation/models/7
     ax.plot([0.2, 0.8], [0.6, 0.6], c='k')
     if p_val < 0.01:
         if str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '4':
-            ax.text(s='P < 10$^{-4}$', x=0.2, y=0.63)
-        elif str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '3':
             ax.text(s='P < 10$^{-3}$', x=0.2, y=0.63)
+        elif str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '3':
+            ax.text(s='P < 10$^{-2}$', x=0.2, y=0.63)
+        elif str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '6':
+            ax.text(s='P < 10$^{-5}$', x=0.2, y=0.63)
+        elif str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1) == '5':
+            ax.text(s='P < 10$^{-4}$', x=0.2, y=0.63)
         else:
-            assert False, f'p value is {p_val}'
+            assert False, f'p value is {p_val}, or {ru.two_digit_sci_not(p_val)[-2:]}'
     else:
         ax.text(s=f'n.s.', x=0.4, y=0.63)
     ax.set_xlim(xlim)
@@ -480,8 +484,8 @@ def plot_stl_mtl_comparison(dmc_only_folder='/home/thijs/repos/rotation/models/7
     ax.set_title('Dual task networks eavesdrop\nto learn the matching task', loc='left', fontdict={'weight': 'bold'})
     ax = despine(ax)
 
-def plot_7525_5050_comparison(folder_50='/home/thijs/repos/rotation/models/5050/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
-                            folder_75='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
+def plot_7525_5050_comparison(folder_50='/home/tplas/repos/eavesdropping/models/5050/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
+                            folder_75='/home/tplas/repos/eavesdropping/models/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
                             method='integral', ax=None):
     """Quantify eavesdropping  difference between correlated and uncorrelated networks
     """
@@ -823,7 +827,7 @@ def plot_bar_plot_all_tasks(ax=None, method='final_loss', save_fig=False):
                  fontdict={'weight': 'bold'}, loc='left')
     despine(ax)
     if save_fig:
-        plt.savefig('figures/nips/fig3_other-tasks_v2.pdf', bbox_inches='tight')
+        plt.savefig('figures/fig3_other-tasks_v2.pdf', bbox_inches='tight')
 
 
 def plot_bar_plot_all_tasks_splitup(ax=None, method='final_loss', save_fig=False):
@@ -875,9 +879,9 @@ def plot_bar_plot_all_tasks_splitup(ax=None, method='final_loss', save_fig=False
     ax.text(s='eavesdropping\neffect', x=0.2, y=7.4, fontdict={'rotation': 90, 'va': 'center', 'size': 10})
     despine(ax)
     if save_fig:
-        plt.savefig('figures/nips/fig3_other-tasks_v4.svg', bbox_inches='tight')
+        plt.savefig('figures/fig3_other-tasks_v4.svg', bbox_inches='tight')
 
-def plot_sa_convergence(sa_folder_list=['/home/thijs/repos/rotation/models/simulated_annealing/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc'],
+def plot_sa_convergence(sa_folder_list=['/home/tplas/repos/eavesdropping/models/simulated_annealing/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc'],
                         figsize=None, plot_std=True, plot_indiv=False):
     """Function plotting convergence of simulated annealing networks by plotting both
     ratio_expected-array and loss function, for the foldres given in the list .
@@ -926,7 +930,7 @@ def plot_sa_convergence(sa_folder_list=['/home/thijs/repos/rotation/models/simul
     return fig
 
 
-def plot_sa_convergence_small(sa_folder_list=['/home/thijs/repos/rotation/models/simulated_annealing/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc'],
+def plot_sa_convergence_small(sa_folder_list=['/home/tplas/repos/eavesdropping/models/simulated_annealing/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc'],
                         figsize=None, plot_std=True, plot_indiv=False, color_list=[pred_spec_colour, '#6ecba6ff']):
     """Function plotting convergence of simulated annealing networks by plotting both
     ratio_expected-array and loss function, for the foldres given in the list .
@@ -969,7 +973,7 @@ def plot_sa_convergence_small(sa_folder_list=['/home/thijs/repos/rotation/models
                             fontdict={'weight': 'bold'}, loc='left')
     return fig
 
-def plot_autotemp_s1_decoding(parent_folder='/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/',
+def plot_autotemp_s1_decoding(parent_folder='/home/tplas/repos/eavesdropping/models/7525/dmc_task/onehot/sparsity_1e-03/',
                               ax=None, plot_legend=False):
     """Plot autotemporal decoding accuracy for pred only, spec only and pred spec networks .
     """
@@ -1014,7 +1018,7 @@ def plot_autotemp_s1_decoding(parent_folder='/home/thijs/repos/rotation/models/7
     despine(ax)
 
 
-def plot_autotemp_all_reps_decoding(rnn_folder='/home/thijs/repos/rotation/models/7525/dms_task/onehot/sparsity_1e-04/pred_dms/',
+def plot_autotemp_all_reps_decoding(rnn_folder='/home/tplas/repos/eavesdropping/models/7525/dms_task/onehot/sparsity_1e-04/pred_dms/',
                               ax=None, plot_legend=True, reset_decoders=True, skip_if_already_decoded=False):
     """Plot autotemporal decoding for S1, S2 and MNM """
     if ax is None:
@@ -1169,10 +1173,10 @@ def plot_hist_rot_indices(rnn_folder, representation='s1', ax=None, verbose=0):
     despine(ax)
     return rot_ind_arr
 
-def plot_autotemp_s1_different_epochs(rnn_folder='/home/thijs/repos/rotation/models/save_state/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
+def plot_autotemp_s1_different_epochs(rnn_folder='/home/tplas/repos/eavesdropping/models/save_state/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
                                       # rnn_name='rnn-mnm_2021-05-13-2134.data',
                                       add_labels=False,
-                                      epoch_list=[1, 2, 4, 6, 8, 10, 12, 15, 18, 20, 25, 40],
+                                      epoch_list=[1, 2, 4, 6, 8, 10, 12, 15, 18, 20, 21, 25, 40],
                                       ax=None, plot_legend=True, autotemp_dec_mat_dict=None):
     """Plot autotemp corr of S1 represention for different epochs. Averaged over
     rnns in the rnn_folder. This is saved in autotemp_dec_mat_dict, which is returned.
@@ -1317,7 +1321,7 @@ def plot_all_UWVT(rnn_model, freq_labels='', weight_order=None, ax_w=None, th=No
 def plot_example_codes(one_ax=True, specify_irnn_list=None, sorting_rnns=None):
     """Plot neural memory code of rnns in rnn_folder. Either plot the 1D code (mean S1 cross corr)
     of all rnns on 1 ax, or plot 1D and 2D cross corr for each rnn on a new row."""
-    rnn_folder = '/home/thijs/repos/rotation/models/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/'
+    rnn_folder = '/home/tplas/repos/eavesdropping/models/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/'
     rnn_list = ru.get_list_rnns(rnn_folder=rnn_folder)
 
     # fig, ax = plt.subplots(5, 5, figsize=(25, 20))

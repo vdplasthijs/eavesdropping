@@ -979,8 +979,8 @@ def plot_prediction_example(rnn, verbose=1, plot_conv=True):
     return (ax_gt, ax_act, ax_pred)
 
 def plot_convergence_stats(ax_left=None, ax_middle=None, ax_right=None,
-                           networksize_folder='/home/thijs/repos/rotation/models/75-25_ChangingNNodes_115models/',
-                           splitloss_folder='/home/thijs/repos/rotation/models/75-25_SplitLoss_Xmodels/200epochs'):
+                           networksize_folder='/home/tplas/repos/eavesdropping/models/75-25_ChangingNNodes_115models/',
+                           splitloss_folder='/home/tplas/repos/eavesdropping/models/75-25_SplitLoss_Xmodels/200epochs'):
     if ax_left is None and ax_middle is None and ax_right is None:
         fig = plt.figure(constrained_layout=False)
         gs = fig.add_gridspec(ncols=3, nrows=1, wspace=0.45)
