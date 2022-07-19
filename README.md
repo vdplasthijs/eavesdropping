@@ -7,4 +7,4 @@ See paper for explanation, this is the code that created all figures, including 
 - `Train or load a single network.ipynb` is an example notebook of how to train RNNs on 1 or multiple tasks.
 - `Figure generation notebook.ipynb` creates all figures of the paper
 
-Please note: because all networks are saved, the repository is quite large. Alternatively, you can download everything except the `models[..]/` folders to exclude pre-trained networks. 
+Please note: because all networks are saved, the repository is quite large (approximately 750MB). Alternatively, you can download everything except the `models/` folder (and the `.git/` folder) to exclude pre-trained networks, which saves 740MB. 
