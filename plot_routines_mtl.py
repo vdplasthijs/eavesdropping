@@ -397,9 +397,40 @@ def plot_n_nodes_sweep_multiple(super_folder='/home/tplas/repos/eavesdropping/mo
               color='k', length_includes_head=True)
     ax.text(s='sparsity', x=4.55, y=0.63, rotation=90, fontsize=12)
 
+def return_str_p_val(p_val, threshold=0.01):
+    
+    if p_val < threshold:
+        exp_sci_not_p = int(ru.two_digit_sci_not(p_val)[-2:])
+        
+        ## do this by hand to get $$
+        if str(exp_sci_not_p) == '2':
+            str_p = 'n.s.'
+        elif str(exp_sci_not_p) == '3':
+            str_p = 'P < 10$^{-2}$'
+        elif str(exp_sci_not_p) == '4':
+            str_p = 'P < 10$^{-3}$'
+        elif str(exp_sci_not_p) == '5':
+            str_p = 'P < 10$^{-4}$'
+        elif str(exp_sci_not_p) == '6':
+            str_p = 'P < 10$^{-5}$'
+        elif str(exp_sci_not_p) == '7':
+            str_p = 'P < 10$^{-6}$'
+        elif str(exp_sci_not_p) == '8':
+            str_p = 'P < 10$^{-7}$'
+        else:
+            assert False, f'p value is {p_val}'
+    else:
+        str_p = 'n.s.'
+
+    if str_p == 'n.s.':
+        x_coord, y_coord = 0.4, 0.68
+    else:
+        x_coord, y_coord = 0.2, 0.63
+    return str_p, (x_coord, y_coord)
+
 def plot_late_s2_comparison(late_s2_folder='/home/tplas/repos/eavesdropping/models/late_s2/7525/dmc_task/onehot/sparsity_1e-03/pred_only',
                             early_s2_folder='/home/tplas/repos/eavesdropping/models/7525/dmc_task/onehot/sparsity_1e-03/pred_only',
-                            method='integral', ax=None):
+                            method='integral', ax=None, verbose=0):
     """Function plotting pointplot of regular (early) s2 performance and late s2 performance.
     """
     if ax is None:
@@ -417,14 +448,13 @@ def plot_late_s2_comparison(late_s2_folder='/home/tplas/repos/eavesdropping/mode
     sns.pointplot(data=learn_eff_df, x='s2_timing', y='learning_index', ax=ax, color='k', join=False)
     p_val = scipy.stats.wilcoxon(dict_early['pred'], dict_late['pred'],
                                        alternative='two-sided')[1]
-    print(p_val, 'late s2')
+    if verbose > 0:
+        print(p_val, 'late s2')
     xlim = ax.get_xlim()
     ylim = ax.get_ylim()
     ax.plot([0.2, 0.8], [0.627, 0.627], c='k')
-    if p_val < 0.01:
-        ax.text(s=f'P < 10^-{str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1)}', x=0.2, y=0.63)
-    else:
-        ax.text(s=f'n.s.', x=0.4, y=0.68)
+    str_p, (x_coord_str, y_coord_str) = return_str_p_val(p_val=p_val)
+    ax.text(s=str_p, x=x_coord_str, y=y_coord_str)
     ax.set_xlim(xlim)
     # ax.set_ylim(ylim)
     ax.set_ylim([-0.05, 1.6])
@@ -439,7 +469,7 @@ def plot_late_s2_comparison(late_s2_folder='/home/tplas/repos/eavesdropping/mode
 
 def plot_stl_mtl_comparison(dmc_only_folder='/home/tplas/repos/eavesdropping/models/7525/dmc_task/onehot/sparsity_1e-03/dmc_only/',
                             pred_dmc_folder='/home/tplas/repos/eavesdropping/models/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
-                            method='integral', ax=None):
+                            method='integral', ax=None, verbose=0):
     """Function that quantifies eavesdropping effect (between STL and MTL networks )"""
     if ax is None:
         ax = plt.subplot(111)
@@ -456,14 +486,13 @@ def plot_stl_mtl_comparison(dmc_only_folder='/home/tplas/repos/eavesdropping/mod
     sns.pointplot(data=learn_eff_df, x='network_task', y='learning_index', ax=ax, color='k', join=False)
     p_val = scipy.stats.wilcoxon(dict_stl['dmc'], dict_mtl['dmc'],
                                        alternative='two-sided')[1]
-    print(p_val, 'mtl stl')
+    if verbose > 0:
+        print(p_val, 'mtl stl')
     xlim = ax.get_xlim()
     ylim = ax.get_ylim()
     ax.plot([0.2, 0.8], [0.6, 0.6], c='k')
-    if p_val < 0.01:
-        ax.text(s=f'P < 10^-{str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1)}', x=0.2, y=0.63)
-    else:
-        ax.text(s=f'n.s.', x=0.4, y=0.63)
+    str_p, (x_coord_str, y_coord_str) = return_str_p_val(p_val=p_val)
+    ax.text(s=str_p, x=x_coord_str, y=y_coord_str)
     ax.set_xlim(xlim)
     # ax.set_ylim(ylim)
     ax.set_ylim([-0.05, 1.6])
@@ -477,7 +506,7 @@ def plot_stl_mtl_comparison(dmc_only_folder='/home/tplas/repos/eavesdropping/mod
 
 def plot_7525_5050_comparison(folder_50='/home/tplas/repos/eavesdropping/models/5050/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
                             folder_75='/home/tplas/repos/eavesdropping/models/7525/dmc_task/onehot/sparsity_1e-03/pred_dmc/',
-                            method='integral', ax=None):
+                            method='integral', ax=None, verbose=0):
     """Quantify eavesdropping  difference between correlated and uncorrelated networks
     """
     if ax is None:
@@ -496,14 +525,13 @@ def plot_7525_5050_comparison(folder_50='/home/tplas/repos/eavesdropping/models/
                   ax=ax, color='k', join=False)
     p_val = scipy.stats.wilcoxon(dict_50['dmc'], dict_75['dmc'],
                                        alternative='two-sided')[1]
-    print(p_val, 'mtl stl')
+    if verbose > 0:
+        print(p_val, '75 50')
     xlim = ax.get_xlim()
     ylim = ax.get_ylim()
     ax.plot([0.2, 0.8], [0.6, 0.6], c='k')
-    if p_val < 0.01:
-        ax.text(s=f'P < 10^-{str(int(ru.two_digit_sci_not(p_val)[-2:]) - 1)}', x=0.2, y=0.63)
-    else:
-        ax.text(s=f'n.s.', x=0.4, y=0.63)
+    str_p, (x_coord_str, y_coord_str) = return_str_p_val(p_val=p_val)
+    ax.text(s=str_p, x=x_coord_str, y=y_coord_str)
     ax.set_xlim(xlim)
     ax.set_ylim([-0.05, 1.6])
     # ax.set_xlabel('Ratio ' + r"$\alpha$" + '/' + r"$\beta$")
