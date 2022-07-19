@@ -496,6 +496,7 @@ def plot_7525_5050_comparison(folder_50='/home/tplas/repos/eavesdropping/models/
                   ax=ax, color='k', join=False)
     p_val = scipy.stats.wilcoxon(dict_50['dmc'], dict_75['dmc'],
                                        alternative='two-sided')[1]
+    print(p_val, 'mtl stl')
     xlim = ax.get_xlim()
     ylim = ax.get_ylim()
     ax.plot([0.2, 0.8], [0.6, 0.6], c='k')
