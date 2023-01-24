@@ -1,5 +1,9 @@
-# Code for Van der Plas, Vogels* and Manohar*, 2022, Proceedings Machine Learning Research (accepted). 
+# Code for Van der Plas, Vogels* and Manohar*, 2022, Proceedings Machine Learning Research 
 Presented at COLLAS, August 2022, conference. 
+
+https://proceedings.mlr.press/v199/plas22a.html
+
+__We welcome you to reuse this code, but please cite our paper if you do! Thank you!__
 
 See paper for explanation, this is the code that created all figures, including the saved trained networks.
 
