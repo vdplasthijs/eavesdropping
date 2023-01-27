@@ -12,6 +12,7 @@ authors:
   - family-names: "Vogels"
     given-names: " Tim P."
 preferred-citation:
+  type: "conference-paper"
   publisher:
     name: "PMLR"
   doi: "N/A"
@@ -33,4 +34,3 @@ preferred-citation:
       given-names: " Sanjay G."
     - family-names: "Vogels"
       given-names: " Tim P."
-  type: "inproceedings"
