@@ -17,6 +17,7 @@ preferred-citation:
   url: "https://proceedings.mlr.press/v199/plas22a.html"
   date-released: "2022-08-24"
   volume: "199"
+  journal: "Proceedings of Machine Learning Research"
   title: "Predictive Learning Enables Neural Networks to Learn Complex Working Memory Tasks"
   booktitle: "Proceedings of The 1st Conference on Lifelong Learning Agents"
   editor: "Chandar, Sarath and Pascanu, Razvan and Precup, Doina"
